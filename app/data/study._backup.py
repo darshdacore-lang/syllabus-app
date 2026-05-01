@@ -1,11 +1,23 @@
+from __future__ import annotations
+
 import csv
 import json
+import sys
+import traceback
 from collections import Counter, defaultdict
 from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
-import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    import tkinter as tk
+    from tkinter import messagebox, simpledialog, ttk
+else:
+    tk: Any = None
+    messagebox: Any = None
+    simpledialog: Any = None
+    ttk: Any = None
 
 
 class Tooltip:
@@ -13,28 +25,40 @@ class Tooltip:
         self.widget = widget
         self.text = text
         self.tooltip = None
-        widget.bind("<Enter>", self.show_tooltip)
-        widget.bind("<Leave>", self.hide_tooltip)
+        widget.bind("<Enter>", self.show_tooltip, add="+")
+        widget.bind("<Leave>", self.hide_tooltip, add="+")
+        widget.bind("<ButtonPress>", self.hide_tooltip, add="+")
 
     def show_tooltip(self, event=None):
-        x, y, _, _ = self.widget.bbox("insert")
-        x += self.widget.winfo_rootx() + 25
-        y += self.widget.winfo_rooty() + 25
-        self.tooltip = tk.Toplevel(self.widget)
-        self.tooltip.wm_overrideredirect(True)
-        self.tooltip.wm_geometry(f"+{x}+{y}")
-        label = tk.Label(
-            self.tooltip,
-            text=self.text,
-            background="#ffffe0",
-            relief="solid",
-            borderwidth=1,
-        )
-        label.pack()
+        if self.tooltip or not self.widget.winfo_exists():
+            return
+        try:
+            if event is not None:
+                x = event.x_root + 16
+                y = event.y_root + 16
+            else:
+                x = self.widget.winfo_rootx() + 16
+                y = self.widget.winfo_rooty() + self.widget.winfo_height() + 8
+            self.tooltip = tk.Toplevel(self.widget)
+            self.tooltip.wm_overrideredirect(True)
+            self.tooltip.wm_geometry(f"+{x}+{y}")
+            label = tk.Label(
+                self.tooltip,
+                text=self.text,
+                background="#ffffe0",
+                relief="solid",
+                borderwidth=1,
+            )
+            label.pack()
+        except tk.TclError:
+            self.hide_tooltip()
 
     def hide_tooltip(self, event=None):
         if self.tooltip:
-            self.tooltip.destroy()
+            try:
+                self.tooltip.destroy()
+            except tk.TclError:
+                pass
             self.tooltip = None
 
 
@@ -45,6 +69,7 @@ CSV_EXPORT = BASE_DIR / "study_export.csv"
 REPORT_EXPORT = BASE_DIR / "study_report.html"
 BACKUP_FILE = BASE_DIR / "study_backup.json"
 ICON_PNG = BASE_DIR / "assets" / "study-helper-icon.png"
+ERROR_LOG = BASE_DIR / "study_error.log"
 
 POMODORO_PRESETS = {
     "Pomodoro 25/5": {"focus": 25, "short_break": 5, "long_break": 15, "long_after": 4},
@@ -106,7 +131,12 @@ def now_local():
 def parse_iso(value):
     if not value:
         return None
-    return datetime.fromisoformat(value)
+
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        local_tz = datetime.now().astimezone().tzinfo
+        return dt.replace(tzinfo=local_tz)
+    return dt
 
 
 def minutes_to_label(total_minutes):
@@ -124,6 +154,36 @@ def safe_int(value, default=0):
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def ensure_tk_available():
+    global tk, messagebox, simpledialog, ttk
+
+    if (
+        tk is not None
+        and messagebox is not None
+        and simpledialog is not None
+        and ttk is not None
+    ):
+        return
+    try:
+        import tkinter as tk_module
+        from tkinter import messagebox as messagebox_module
+        from tkinter import simpledialog as simpledialog_module
+        from tkinter import ttk as ttk_module
+    except ModuleNotFoundError as exc:
+        raise SystemExit(
+            "Tkinter is not available in this Python environment.\n"
+            "Install a Python build with Tk support, then rerun the app.\n"
+            "macOS/Homebrew example:\n"
+            "  brew install python-tk@3.14\n"
+            "  python3 study.py\n"
+        ) from exc
+
+    tk = tk_module
+    messagebox = messagebox_module
+    simpledialog = simpledialog_module
+    ttk = ttk_module
 
 
 class StudyStore:
@@ -374,9 +434,41 @@ class StudyStore:
 
 
 class StudyApp:
+    session_note_text: Any
+    task_details_text: Any
+    plan_notes_text: Any
+    exam_notes_text: Any
+    topic_notes_text: Any
+    review_text: Any
+    dashboard_text: Any
+    history_note_text: Any
+    chart_canvas: Any
+    task_tree: Any
+    plan_tree: Any
+    exam_tree: Any
+    topic_tree: Any
+    history_tree: Any
+    template_tree: Any
+    subject_goal_tree: Any
+
     def __init__(self):
         self.store = StudyStore()
         self.root = tk.Tk()
+        self.root.report_callback_exception = self.handle_callback_exception
+
+        self.setup_window()
+        self.setup_menu()
+        self.initialize_state()
+        self.initialize_widget_references()
+
+        self.configure_style()
+        self.build_ui()
+        self.apply_theme()
+        self.refresh_everything()
+        self.restore_active_session()
+        self.bind_shortcuts()
+
+    def setup_window(self):
         self.app_icon = None
         self.root.title(APP_NAME)
         self.root.geometry("1400x960")
@@ -384,10 +476,7 @@ class StudyApp:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.configure_app_icon()
 
-        self.tick_job = None
-        self.notification_open = False
-
-        # Menu bar
+    def setup_menu(self):
         self.menubar = tk.Menu(self.root)
         self.root.config(menu=self.menubar)
 
@@ -405,6 +494,10 @@ class StudyApp:
         help_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label="Help", menu=help_menu)
         help_menu.add_command(label="About", command=self.show_about)
+
+    def initialize_state(self):
+        self.tick_job = None
+        self.notification_open = False
 
         self.profile_var = tk.StringVar(value=self.store.data["current_profile"])
         self.theme_var = tk.StringVar(value=self.profile["settings"]["theme"])
@@ -461,37 +554,49 @@ class StudyApp:
         self.subject_goal_var = tk.StringVar()
         self.subject_goal_minutes_var = tk.StringVar()
 
-        self.session_note_text: tk.Text
-        self.task_details_text: tk.Text
-        self.plan_notes_text: tk.Text
-        self.exam_notes_text: tk.Text
-        self.topic_notes_text: tk.Text
-        self.review_text: tk.Text
-        self.dashboard_text: tk.Text
-        self.history_note_text: tk.Text
-        self.chart_canvas: tk.Canvas
-        self.task_tree: ttk.Treeview
-        self.plan_tree: ttk.Treeview
-        self.exam_tree: ttk.Treeview
-        self.topic_tree: ttk.Treeview
-        self.history_tree: ttk.Treeview
-        self.template_tree: ttk.Treeview
-        self.subject_goal_tree: ttk.Treeview
-
         self.task_labels = {}
         self.template_labels = {}
         self.theme = LIGHT_THEME
 
-        self.configure_style()
-        self.build_ui()
-        self.apply_theme()
-        self.refresh_everything()
-        self.restore_active_session()
-        self.bind_shortcuts()
+    def initialize_widget_references(self):
+        self.session_note_text = None
+        self.task_details_text = None
+        self.plan_notes_text = None
+        self.exam_notes_text = None
+        self.topic_notes_text = None
+        self.review_text = None
+        self.dashboard_text = None
+        self.history_note_text = None
+        self.chart_canvas = None
+        self.task_tree = None
+        self.plan_tree = None
+        self.exam_tree = None
+        self.topic_tree = None
+        self.history_tree = None
+        self.template_tree = None
+        self.subject_goal_tree = None
 
     @property
     def profile(self):
         return self.store.current_profile()
+
+    def show_error(self, title, message):
+        self.root.bell()
+        self.status_var.set(f"{title}: {message}")
+
+    def show_info(self, title, message):
+        self.status_var.set(f"{title}: {message}")
+
+    def handle_callback_exception(self, exc, value, tb):
+        details = "".join(traceback.format_exception(exc, value, tb))
+        print(details, file=sys.stderr)
+        try:
+            with ERROR_LOG.open("a", encoding="utf-8") as log_file:
+                log_file.write(f"[{now_local().isoformat()}]\n{details}\n")
+        except OSError:
+            pass
+        if hasattr(self, "status_var"):
+            self.status_var.set(f"Action failed: {value}")
 
     def configure_style(self):
         style = ttk.Style(self.root)
@@ -1389,7 +1494,7 @@ class StudyApp:
         if not name:
             return
         if not self.store.add_profile(name):
-            messagebox.showerror(
+            self.show_error(
                 "Cannot add profile", "That profile already exists or is invalid."
             )
             return
@@ -1493,14 +1598,14 @@ class StudyApp:
     def add_task(self):
         title = self.task_title_var.get().strip()
         if not title:
-            messagebox.showerror("Missing title", "Task title is required.")
+            self.show_error("Missing title", "Task title is required.")
             return
         due = self.task_due_var.get().strip()
         if due:
             try:
                 datetime.strptime(due, "%Y-%m-%d")
             except ValueError:
-                messagebox.showerror("Invalid date", "Use YYYY-MM-DD.")
+                self.show_error("Invalid date", "Use YYYY-MM-DD.")
                 return
         task = {
             "id": self.store.next_id("task"),
@@ -1533,6 +1638,7 @@ class StudyApp:
     def mark_task_done(self):
         task_id = self.selected_tree_id(self.task_tree)
         if task_id is None:
+            self.status_var.set("Select a task before marking it done.")
             return
         for task in self.profile["tasks"]:
             if safe_int(task["id"]) == task_id:
@@ -1544,6 +1650,7 @@ class StudyApp:
     def delete_task(self):
         task_id = self.selected_tree_id(self.task_tree)
         if task_id is None:
+            self.status_var.set("Select a task before deleting it.")
             return
         self.profile["tasks"] = [
             task for task in self.profile["tasks"] if safe_int(task["id"]) != task_id
@@ -1578,9 +1685,7 @@ class StudyApp:
         subject = self.plan_subject_var.get().strip()
         minutes = safe_int(self.plan_minutes_var.get(), 0)
         if not subject or minutes <= 0:
-            messagebox.showerror(
-                "Invalid plan", "Enter a subject and positive minutes."
-            )
+            self.show_error("Invalid plan", "Enter a subject and positive minutes.")
             return
         days = [
             day.strip() for day in self.plan_days_var.get().split(",") if day.strip()
@@ -1606,6 +1711,7 @@ class StudyApp:
     def delete_plan(self):
         plan_id = self.selected_tree_id(self.plan_tree)
         if plan_id is None:
+            self.status_var.set("Select a plan before deleting it.")
             return
         self.profile["plans"] = [
             plan for plan in self.profile["plans"] if safe_int(plan["id"]) != plan_id
@@ -1634,12 +1740,12 @@ class StudyApp:
         subject = self.exam_subject_var.get().strip() or "General"
         date_text = self.exam_date_var.get().strip()
         if not name or not date_text:
-            messagebox.showerror("Invalid exam", "Exam name and date are required.")
+            self.show_error("Invalid exam", "Exam name and date are required.")
             return
         try:
             datetime.strptime(date_text, "%Y-%m-%d")
         except ValueError:
-            messagebox.showerror("Invalid date", "Use YYYY-MM-DD.")
+            self.show_error("Invalid date", "Use YYYY-MM-DD.")
             return
         exam = {
             "id": self.store.next_id("exam"),
@@ -1661,6 +1767,7 @@ class StudyApp:
     def delete_exam(self):
         exam_id = self.selected_tree_id(self.exam_tree)
         if exam_id is None:
+            self.status_var.set("Select an exam before deleting it.")
             return
         self.profile["exams"] = [
             exam for exam in self.profile["exams"] if safe_int(exam["id"]) != exam_id
@@ -1691,7 +1798,7 @@ class StudyApp:
         topic_name = self.topic_name_var.get().strip()
         progress = safe_int(self.topic_progress_var.get(), 0)
         if not subject or not topic_name or progress < 0 or progress > 100:
-            messagebox.showerror(
+            self.show_error(
                 "Invalid topic", "Enter subject, topic, and progress from 0 to 100."
             )
             return
@@ -1713,6 +1820,7 @@ class StudyApp:
     def delete_topic(self):
         topic_id = self.selected_tree_id(self.topic_tree)
         if topic_id is None:
+            self.status_var.set("Select a topic before deleting it.")
             return
         self.profile["topics"] = [
             topic
@@ -1725,6 +1833,7 @@ class StudyApp:
     def shift_topic_progress(self, delta):
         topic_id = self.selected_tree_id(self.topic_tree)
         if topic_id is None:
+            self.status_var.set("Select a topic before changing its progress.")
             return
         for topic in self.profile["topics"]:
             if safe_int(topic["id"]) == topic_id:
@@ -1774,6 +1883,7 @@ class StudyApp:
     def delete_template(self):
         template_id = self.selected_tree_id(self.template_tree)
         if template_id is None:
+            self.status_var.set("Select a template before deleting it.")
             return
         self.profile["templates"] = [
             template
@@ -1884,7 +1994,7 @@ class StudyApp:
         subject = self.subject_goal_var.get().strip()
         minutes = safe_int(self.subject_goal_minutes_var.get(), 0)
         if not subject or minutes <= 0:
-            messagebox.showerror(
+            self.show_error(
                 "Invalid goal", "Enter a subject and a positive minute target."
             )
             return
@@ -1897,6 +2007,7 @@ class StudyApp:
     def delete_subject_goal(self):
         selected = self.subject_goal_tree.selection()
         if not selected:
+            self.status_var.set("Select a subject goal before deleting it.")
             return
         subject = self.subject_goal_tree.item(selected[0], "values")[0]
         self.profile["goals"]["subject_minutes"].pop(subject, None)
@@ -1943,6 +2054,12 @@ class StudyApp:
         if not active:
             self.update_timer_display()
             return
+        if active.get("session_type") == "break":
+            self.profile["active_session"] = None
+            self.store.save()
+            self.status_var.set("Cleared a saved break from your last session.")
+            self.update_timer_display()
+            return
         self.subject_var.set(active.get("subject", ""))
         self.minutes_var.set(str(active.get("planned_minutes", 25)))
         self.tags_var.set(", ".join(active.get("tags", [])))
@@ -1956,17 +2073,23 @@ class StudyApp:
         self.start_tick_loop()
 
     def start_session(self):
-        if self.profile.get("active_session"):
-            messagebox.showinfo(
+        active_session = self.profile.get("active_session")
+        if active_session and active_session.get("session_type") == "break":
+            self.profile["active_session"] = None
+            self.store.save()
+            active_session = None
+            self.status_var.set(
+                "Skipped the saved break and started a new focus session."
+            )
+        if active_session:
+            self.show_info(
                 "Session already active",
                 "Finish, cancel, or resume the current timer first.",
             )
             return
         minutes = safe_int(self.minutes_var.get(), 0)
         if minutes <= 0:
-            messagebox.showerror(
-                "Invalid session", "Minutes must be a positive number."
-            )
+            self.show_error("Invalid session", "Minutes must be a positive number.")
             return
         preset = POMODORO_PRESETS.get(self.preset_var.get(), POMODORO_PRESETS["Custom"])
         task_id = self.task_labels.get(self.task_var.get())
@@ -2081,6 +2204,7 @@ class StudyApp:
     def extend_session(self):
         active = self.profile.get("active_session")
         if not active:
+            self.status_var.set("Start a session before extending it.")
             return
         active["remaining_seconds"] = safe_int(active["remaining_seconds"]) + 300
         active["total_seconds"] = safe_int(active["total_seconds"]) + 300
@@ -2092,6 +2216,7 @@ class StudyApp:
     def finish_now(self):
         active = self.profile.get("active_session")
         if not active:
+            self.status_var.set("No active session to finish.")
             return
         active["remaining_seconds"] = 0
         active["updated_at"] = now_local().isoformat()
@@ -2110,6 +2235,7 @@ class StudyApp:
     def cancel_session(self):
         active = self.profile.get("active_session")
         if not active:
+            self.status_var.set("No active session to cancel.")
             return
         entry = self.build_session_entry(active, "cancelled")
         self.profile["sessions"].append(entry)
@@ -2578,17 +2704,11 @@ class StudyApp:
 </html>"""
 
     def notify(self, title, message):
-        if not self.notifications_var.get():
-            return
         if self.sound_var.get():
             self.root.bell()
-        if self.notification_open:
+        if not self.notifications_var.get() or self.notification_open:
             return
-        self.notification_open = True
-        try:
-            messagebox.showinfo(title, message)
-        finally:
-            self.notification_open = False
+        self.show_info(title, message)
 
     def on_close(self):
         active = self.profile.get("active_session")
@@ -2621,15 +2741,29 @@ class StudyApp:
         ).pack(pady=10)
 
     def show_about(self):
-        messagebox.showinfo(
-            "About", "Study Helper v1.0\nA comprehensive study management app."
-        )
+        about_win = tk.Toplevel(self.root)
+        about_win.title("About")
+        about_win.geometry("360x180")
+        about_win.transient(self.root)
+        ttk.Label(
+            about_win,
+            text="Study Helper v1.0",
+            font=("Avenir Next", 16, "bold"),
+        ).pack(pady=(18, 8))
+        ttk.Label(
+            about_win,
+            text="A comprehensive study management app.",
+            wraplength=300,
+            justify="center",
+        ).pack(padx=20)
+        ttk.Button(about_win, text="Close", command=about_win.destroy).pack(pady=18)
 
     def run(self):
         self.root.mainloop()
 
 
 def run_app():
+    ensure_tk_available()
     app = StudyApp()
     app.run()
 
