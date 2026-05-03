@@ -37,6 +37,22 @@ class SessionEngine:
         plan["enabled"] = bool(plan.get("enabled", True))
         return plan
 
+    def get_break_settings(self):
+        plan = self._build_break_plan()
+        return {
+            "short_break": plan["short_break"],
+            "long_break": plan["long_break"],
+            "long_break_after": plan["long_break_after"],
+        }
+
+    def save_break_settings(self, short_break, long_break, long_break_after):
+        settings = self.profile.setdefault("settings", {})
+        settings["default_short_break"] = max(1, safe_int(short_break, 5))
+        settings["default_long_break"] = max(1, safe_int(long_break, 15))
+        settings["long_break_after"] = max(1, safe_int(long_break_after, 4))
+        self.storage.save()
+        return self.get_break_settings()
+
     # ─────────────────────────────
     # START FOCUS
     # ─────────────────────────────
@@ -196,9 +212,10 @@ class SessionEngine:
         self.storage.save()
         return self.profile["active_session"]
 
-    def next_break_preview(self, active=None):
+    def next_break_preview(self, active=None, break_plan=None):
         active = active or self.get_active()
-        plan = self._build_break_plan((active or {}).get("break_plan"))
+        override = break_plan if break_plan is not None else (active or {}).get("break_plan")
+        plan = self._build_break_plan(override)
 
         if active and active.get("session_type") == "focus":
             next_cycle = safe_int(active.get("cycle_count"), 0) + 1

@@ -1,4 +1,5 @@
-from datetime import date, datetime
+import datetime
+import re
 
 
 def safe_int(value, default=0):
@@ -16,7 +17,7 @@ def safe_float(value, default=0.0):
 
 
 def now_local():
-    return datetime.now().astimezone()
+    return datetime.datetime.now()
 
 
 def now_iso():
@@ -24,80 +25,49 @@ def now_iso():
 
 
 def parse_iso_datetime(value):
-    if not value:
+    if not isinstance(value, str):
         return None
-
     try:
-        parsed = datetime.fromisoformat(value)
+        return datetime.datetime.fromisoformat(value)
     except ValueError:
-        return None
+        try:
+            return datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            return None
 
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=now_local().tzinfo)
-    return parsed
+
+def format_minutes(minutes):
+    minutes = safe_float(minutes, 0.0)
+    if minutes == int(minutes):
+        return f"{int(minutes)} min"
+    return f"{minutes:.1f} min"
+
+
+def format_timer(seconds):
+    seconds = max(0, safe_int(seconds, 0))
+    minutes = seconds // 60
+    remainder = seconds % 60
+    return f"{minutes:02d}:{remainder:02d}"
 
 
 def parse_date(value):
     if not value:
         return None
-
     try:
-        return date.fromisoformat(str(value))
-    except ValueError:
+        return datetime.datetime.strptime(value.strip(), "%Y-%m-%d").date()
+    except (TypeError, ValueError):
         return None
-
-
-def parse_tags(value):
-    if isinstance(value, str):
-        return [tag.strip() for tag in value.split(",") if tag.strip()]
-    if isinstance(value, list):
-        return [str(tag).strip() for tag in value if str(tag).strip()]
-    return []
 
 
 def join_tags(tags):
-    return ", ".join(parse_tags(tags))
+    if not tags:
+        return ""
+    if isinstance(tags, str):
+        tags = [tags]
+    return ", ".join(str(tag).strip() for tag in tags if str(tag).strip())
 
 
-def format_timer(total_seconds):
-    seconds = max(0, safe_int(total_seconds, 0))
-    minutes, seconds = divmod(seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    if hours:
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-    return f"{minutes:02d}:{seconds:02d}"
-
-
-def format_minutes(total_minutes):
-    minutes = safe_float(total_minutes, 0.0)
-    if minutes.is_integer():
-        return f"{int(minutes)} min"
-    return f"{minutes:.1f} min"
-
-
-def today_local_date():
-    return now_local().date()
-
-
-def days_until(value):
-    parsed = parse_date(value)
-    if parsed is None:
-        return None
-    return (parsed - today_local_date()).days
-
-
-def humanize_due_date(value):
-    parsed = parse_date(value)
-    if parsed is None:
-        return "No date"
-
-    delta = (parsed - today_local_date()).days
-    if delta == 0:
-        return "Today"
-    if delta == 1:
-        return "Tomorrow"
-    if delta > 1:
-        return f"In {delta} days"
-    if delta == -1:
-        return "1 day overdue"
-    return f"{abs(delta)} days overdue"
+def parse_tags(value):
+    if not value:
+        return []
+    return [tag.strip() for tag in str(value).split(",") if tag.strip()]

@@ -1,227 +1,205 @@
-from datetime import date
-from collections import Counter
-
-from app.utils.helpers import (
-    days_until,
-    format_minutes,
-    humanize_due_date,
-    now_iso,
-    parse_date,
-    parse_iso_datetime,
-    parse_tags,
-    safe_float,
-    safe_int,
-    today_local_date,
-)
+from app.utils.helpers import safe_int, safe_float
 
 
 class TaskManager:
     def __init__(self, storage):
         self.storage = storage
         self.profile = storage.profile
-        self._normalize_profile()
 
-    def _normalize_profile(self):
-        changed = False
-
-        if "goals" not in self.profile or not isinstance(self.profile["goals"], dict):
-            self.profile["goals"] = {}
-            changed = True
-
-        self.profile["goals"].setdefault("daily_minutes", 120)
-        self.profile["goals"].setdefault("weekly_sessions", 10)
-        self.profile["goals"].setdefault("subject_minutes", {})
-
-        normalized_tasks = []
-        for task in self.storage.get_collection("tasks"):
-            normalized = {
-                "id": safe_int(task.get("id"), 0),
-                "title": (task.get("title") or "").strip(),
-                "subject": (task.get("subject") or "General").strip() or "General",
-                "details": (task.get("details") or "").strip(),
-                "due_date": (task.get("due_date") or "").strip(),
-                "tags": parse_tags(task.get("tags")),
-                "status": (task.get("status") or "open").strip() or "open",
-                "minutes_logged": round(safe_float(task.get("minutes_logged"), 0.0), 2),
-                "created_at": task.get("created_at") or now_iso(),
-            }
-            if normalized["title"]:
-                if normalized["id"] <= 0:
-                    normalized["id"] = self.storage.next_id("task")
-                    changed = True
-                normalized_tasks.append(normalized)
-
-        if normalized_tasks != self.storage.get_collection("tasks"):
-            self.profile["tasks"] = normalized_tasks
-            changed = True
-
-        if changed:
-            self.storage.save()
-
-    def list_tasks(self, include_done=True):
-        tasks = list(self.storage.get_collection("tasks"))
-        if not include_done:
-            tasks = [task for task in tasks if task.get("status") != "done"]
-
-        return sorted(
-            tasks,
-            key=lambda task: (
-                task.get("status") == "done",
-                parse_date(task.get("due_date")) or date.max,
-                task.get("title", "").lower(),
-            ),
-        )
-
-    def get_task(self, task_id):
-        task_id = safe_int(task_id, 0)
-        for task in self.storage.get_collection("tasks"):
-            if safe_int(task.get("id"), 0) == task_id:
-                return task
-        return None
-
-    def task_choices(self):
-        choices = []
-        for task in self.list_tasks(include_done=False):
-            due_label = humanize_due_date(task.get("due_date"))
-            label = f"{task['title']} - {task['subject']} - {due_label}"
-            choices.append({"id": task["id"], "label": label, "task": task})
-        return choices
-
-    def get_focus_defaults(self, task_id):
-        task = self.get_task(task_id)
-        if not task:
-            return {"subject": "General", "task_title": "", "tags": []}
-        return {
-            "subject": task.get("subject") or "General",
-            "task_title": task.get("title") or "",
-            "tags": list(task.get("tags", [])),
-        }
-
-    def add_task(self, title, subject, details="", due_date="", tags=None):
+    def add_task(self, title, subject="General", due_date="", tags=None, details=""):
         title = (title or "").strip()
         if not title:
-            raise ValueError("Task title is required.")
-
+            raise ValueError("Task title cannot be empty.")
         task = {
             "id": self.storage.next_id("task"),
             "title": title,
-            "subject": (subject or "General").strip() or "General",
-            "details": (details or "").strip(),
-            "due_date": (due_date or "").strip(),
-            "tags": parse_tags(tags),
+            "subject": subject or "General",
+            "due_date": due_date or "",
+            "tags": tags.split(",") if isinstance(tags, str) else (tags or []),
+            "details": details or "",
             "status": "open",
             "minutes_logged": 0,
-            "created_at": now_iso(),
         }
-        self.storage.get_collection("tasks").append(task)
+        self.profile.setdefault("tasks", []).append(task)
         self.storage.save()
         return task
+
+    def get_tasks(self, status=None):
+        tasks = self.profile.get("tasks", [])
+        if status:
+            return [t for t in tasks if t.get("status") == status]
+        return tasks
+
+    def list_tasks(self, include_done=False):
+        tasks = self.get_tasks()
+        if not include_done:
+            tasks = [t for t in tasks if t.get("status") != "done"]
+        return sorted(tasks, key=lambda t: t.get("title", ""))
 
     def set_task_status(self, task_id, status):
-        task = self.get_task(task_id)
-        if not task:
-            raise ValueError("Task not found.")
-        task["status"] = status
+        task_id = safe_int(task_id, 0)
+        for task in self.profile.get("tasks", []):
+            if safe_int(task.get("id"), 0) == task_id:
+                task["status"] = status
+                self.storage.save()
+                return task
+        raise ValueError(f"Task {task_id} not found.")
+
+    def delete_task(self, task_id):
+        task_id = safe_int(task_id, 0)
+        original_count = len(self.profile.get("tasks", []))
+        self.profile["tasks"] = [t for t in self.profile.get("tasks", []) if safe_int(t.get("id"), 0) != task_id]
         self.storage.save()
-        return task
+        if len(self.profile["tasks"]) == original_count:
+            raise ValueError(f"Task {task_id} not found.")
 
-    def planner_snapshot(self):
-        plans = []
-        for plan in self.storage.get_collection("plans"):
-            plans.append(
-                {
-                    "subject": (plan.get("subject") or "General").strip() or "General",
-                    "schedule": ", ".join(plan.get("days", [])) or "Flexible",
-                    "time": plan.get("time") or "--:--",
-                    "minutes": safe_int(plan.get("minutes"), 0),
-                    "notes": plan.get("notes") or "",
-                }
-            )
+    def mark_done(self, task_id):
+        return self.set_task_status(task_id, "done")
 
-        exams = []
-        for exam in self.storage.get_collection("exams"):
-            exams.append(
-                {
-                    "name": (exam.get("name") or "Untitled Exam").strip(),
-                    "subject": (exam.get("subject") or "General").strip() or "General",
-                    "date": exam.get("date") or "",
-                    "countdown": humanize_due_date(exam.get("date")),
-                    "days_until": days_until(exam.get("date")),
-                    "target_minutes": safe_int(exam.get("target_minutes"), 0),
-                }
-            )
-        exams.sort(key=lambda exam: exam["days_until"] if exam["days_until"] is not None else 10**6)
+    def task_choices(self):
+        open_tasks = self.get_tasks(status="open")
+        return [{"id": t.get("id"), "label": f"{t.get('title')} ({t.get('subject', 'General')})"} for t in open_tasks]
 
-        topics = []
-        for topic in self.storage.get_collection("topics"):
-            topics.append(
-                {
-                    "subject": (topic.get("subject") or "General").strip() or "General",
-                    "topic": (topic.get("topic") or "Untitled Topic").strip(),
-                    "progress": max(0, min(100, safe_int(topic.get("progress"), 0))),
-                    "notes": topic.get("notes") or "",
-                }
-            )
+    def get_focus_defaults(self, task_id):
+        task_id = safe_int(task_id, 0)
+        for task in self.profile.get("tasks", []):
+            if safe_int(task.get("id"), 0) == task_id:
+                return {"subject": task.get("subject", "General"), "task_title": task.get("title", ""), "tags": task.get("tags", [])}
+        return {"subject": "General", "task_title": "", "tags": []}
 
-        return {"plans": plans, "exams": exams, "topics": topics}
+    def priority_score(self, task):
+        score = 0
+        if task.get("due_date"):
+            score += 30
+        if safe_float(task.get("minutes_logged", 0), 0.0) < 30:
+            score += 5
+        if task.get("subject") in self.profile.get("goals", {}).get("subject_minutes", {}):
+            score += 10
+        return score
+
+    def get_sorted_tasks(self):
+        tasks = self.get_tasks(status="open")
+        return sorted(tasks, key=lambda t: (-self.priority_score(t), t.get("due_date") or "9999-12-31", t.get("title", "")))
 
     def dashboard_summary(self):
-        sessions = list(self.storage.get_collection("sessions"))
-        tasks = self.list_tasks(include_done=True)
-        today = today_local_date()
-        goals = self.profile.get("goals", {})
-
-        today_minutes = 0.0
-        today_sessions = 0
-        subject_totals = Counter()
-        recent_sessions = []
-
-        for session in sessions:
-            ended_at = parse_iso_datetime(session.get("ended_at"))
-            studied_minutes = safe_float(session.get("studied_minutes"), 0.0)
-            subject = (session.get("subject") or "General").strip() or "General"
-            if studied_minutes > 0:
-                subject_totals[subject] += studied_minutes
-
-            if ended_at:
-                recent_sessions.append(
-                    {
-                        "subject": subject,
-                        "task": session.get("task_title") or session.get("task") or "-",
-                        "minutes": studied_minutes,
-                        "ended_at": ended_at,
-                    }
-                )
-                if ended_at.date() == today:
-                    today_minutes += studied_minutes
-                    today_sessions += 1
-
-        recent_sessions.sort(key=lambda session: session["ended_at"], reverse=True)
-
+        sessions = self.profile.get("sessions", [])
+        tasks = self.profile.get("tasks", [])
+        exams = self.profile.get("exams", [])
+        today_sessions = [s for s in sessions if self._is_today(s.get("ended_at"))]
+        today_minutes = sum(safe_float(s.get("studied_minutes"), 0.0) for s in today_sessions)
+        open_tasks = len([t for t in tasks if t.get("status") == "open"])
+        total_minutes = sum(safe_float(s.get("studied_minutes"), 0.0) for s in sessions)
         next_exam = None
-        for exam in self.planner_snapshot()["exams"]:
-            if exam["days_until"] is None or exam["days_until"] < 0:
-                continue
-            next_exam = exam
-            break
+        if exams:
+            for exam in sorted(exams, key=lambda e: e.get("date", "9999-12-31")):
+                if exam.get("date") and exam.get("date") >= self._today_str():
+                    next_exam = {"name": exam.get("name", "Untitled"), "subject": exam.get("subject", "General"), "countdown": self._countdown_str(exam.get("date"))}
+                    break
+        recent_sessions = [{"subject": s.get("subject", "General"), "task": s.get("task_title", "Quick session"), "minutes": s.get("studied_minutes", 0)} for s in sessions[-5:]][::-1]
+        top_subjects = {}
+        for s in sessions:
+            subject = s.get("subject", "General")
+            minutes = safe_float(s.get("studied_minutes"), 0.0)
+            top_subjects[subject] = top_subjects.get(subject, 0) + minutes
+        top_subjects_list = sorted(top_subjects.items(), key=lambda x: -x[1])[:5]
+        return {"today_minutes": today_minutes, "today_sessions": len(today_sessions), "open_tasks": open_tasks, "total_minutes": total_minutes, "headline": f"You've studied {int(total_minutes)} minutes across {len(sessions)} sessions.", "next_exam": next_exam, "recent_sessions": recent_sessions, "top_subjects": top_subjects_list}
 
-        open_tasks = len([task for task in tasks if task.get("status") != "done"])
-        done_tasks = len(tasks) - open_tasks
-        daily_goal = safe_int(goals.get("daily_minutes"), 120)
-        weekly_goal = safe_int(goals.get("weekly_sessions"), 10)
+    def planner_snapshot(self):
+        return {"plans": self.profile.get("plans", []), "exams": self.profile.get("exams", []), "topics": self.profile.get("topics", [])}
 
-        return {
-            "today_minutes": round(today_minutes, 1),
-            "today_sessions": today_sessions,
-            "total_minutes": round(sum(subject_totals.values()), 1),
-            "open_tasks": open_tasks,
-            "done_tasks": done_tasks,
-            "daily_goal": daily_goal,
-            "weekly_goal": weekly_goal,
-            "recent_sessions": recent_sessions[:6],
-            "top_subjects": subject_totals.most_common(5),
-            "next_exam": next_exam,
-            "headline": (
-                f"{format_minutes(today_minutes)} studied today across {today_sessions} sessions"
-            ),
-        }
+    def save_plan(self, plan_id=None, subject="", days="", time="", minutes="", notes=""):
+        minutes_int = safe_int(minutes, 45)
+        if minutes_int <= 0:
+            raise ValueError("Minutes must be positive.")
+        if plan_id:
+            for plan in self.profile.get("plans", []):
+                if safe_int(plan.get("id"), 0) == safe_int(plan_id, 0):
+                    plan.update({"subject": subject or "General", "days": [d.strip() for d in days.split(",") if d.strip()], "time": time or "--:--", "minutes": minutes_int, "notes": notes or ""})
+                    self.storage.save()
+                    return plan
+        else:
+            plan = {"id": self.storage.next_id("plan"), "subject": subject or "General", "days": [d.strip() for d in days.split(",") if d.strip()], "time": time or "--:--", "minutes": minutes_int, "notes": notes or ""}
+            self.profile.setdefault("plans", []).append(plan)
+            self.storage.save()
+            return plan
+        raise ValueError(f"Plan {plan_id} not found.")
+
+    def delete_plan(self, plan_id):
+        plan_id = safe_int(plan_id, 0)
+        self.profile["plans"] = [p for p in self.profile.get("plans", []) if safe_int(p.get("id"), 0) != plan_id]
+        self.storage.save()
+
+    def save_exam(self, exam_id=None, name="", subject="", date="", target_minutes="", notes=""):
+        target_min = safe_int(target_minutes, 180)
+        if target_min <= 0:
+            raise ValueError("Target minutes must be positive.")
+        if exam_id:
+            for exam in self.profile.get("exams", []):
+                if safe_int(exam.get("id"), 0) == safe_int(exam_id, 0):
+                    exam.update({"name": name or "Untitled", "subject": subject or "General", "date": date or "", "target_minutes": target_min, "notes": notes or "", "countdown": self._countdown_str(date)})
+                    self.storage.save()
+                    return exam
+        else:
+            exam = {"id": self.storage.next_id("exam"), "name": name or "Untitled", "subject": subject or "General", "date": date or "", "target_minutes": target_min, "notes": notes or "", "countdown": self._countdown_str(date)}
+            self.profile.setdefault("exams", []).append(exam)
+            self.storage.save()
+            return exam
+        raise ValueError(f"Exam {exam_id} not found.")
+
+    def delete_exam(self, exam_id):
+        exam_id = safe_int(exam_id, 0)
+        self.profile["exams"] = [e for e in self.profile.get("exams", []) if safe_int(e.get("id"), 0) != exam_id]
+        self.storage.save()
+
+    def save_topic(self, topic_id=None, subject="", topic="", progress=0, notes=""):
+        progress_int = safe_int(progress, 0)
+        if not (0 <= progress_int <= 100):
+            raise ValueError("Progress must be between 0 and 100.")
+        if topic_id:
+            for t in self.profile.get("topics", []):
+                if safe_int(t.get("id"), 0) == safe_int(topic_id, 0):
+                    t.update({"subject": subject or "General", "topic": topic or "Untitled", "progress": progress_int, "notes": notes or ""})
+                    self.storage.save()
+                    return t
+        else:
+            t = {"id": self.storage.next_id("topic"), "subject": subject or "General", "topic": topic or "Untitled", "progress": progress_int, "notes": notes or ""}
+            self.profile.setdefault("topics", []).append(t)
+            self.storage.save()
+            return t
+        raise ValueError(f"Topic {topic_id} not found.")
+
+    def delete_topic(self, topic_id):
+        topic_id = safe_int(topic_id, 0)
+        self.profile["topics"] = [t for t in self.profile.get("topics", []) if safe_int(t.get("id"), 0) != topic_id]
+        self.storage.save()
+
+    def _is_today(self, timestamp_str):
+        if not timestamp_str:
+            return False
+        try:
+            return timestamp_str[:10] == self._today_str()
+        except:
+            return False
+
+    def _today_str(self):
+        from datetime import datetime
+        return datetime.now().strftime("%Y-%m-%d")
+
+    def _countdown_str(self, date_str):
+        if not date_str:
+            return "TBD"
+        try:
+            from datetime import datetime
+            exam_date = datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+            today = datetime.now().date()
+            delta = (exam_date - today).days
+            if delta < 0:
+                return "Past"
+            elif delta == 0:
+                return "Today"
+            elif delta == 1:
+                return "Tomorrow"
+            else:
+                return f"{delta} days"
+        except:
+            return "TBD"

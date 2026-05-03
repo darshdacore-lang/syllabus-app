@@ -1,9 +1,10 @@
 import tkinter as tk
 from tkinter import ttk
 
+from app.metadata import APP_NAME
+from app.ui.app_icon import build_photo_image
 from app.ui.panels import DashboardPanel, FocusPanel, PlannerPanel, TasksPanel
 from app.ui.theme import configure_styles
-
 
 WINDOW_SIZE = "1080x760"
 
@@ -14,11 +15,14 @@ class MainWindow:
         self.task_manager = task_manager
 
         self.root = tk.Tk()
-        self.root.title("Pomodoro Syllabus")
+        self.root.tk.call("tk", "appname", APP_NAME)
+        self.root.title(APP_NAME)
         self.root.geometry(WINDOW_SIZE)
         self.root.minsize(980, 680)
+        self.app_icon_image = None
 
         configure_styles(self.root)
+        self._apply_app_identity()
 
         self.status_var = tk.StringVar(value="Ready to focus.")
         self._active_context = None
@@ -27,10 +31,19 @@ class MainWindow:
         self.refresh_views()
         self.tick_loop()
 
+    def _apply_app_identity(self):
+        try:
+            self.app_icon_image = build_photo_image(128)
+            self.root.iconphoto(True, self.app_icon_image)
+        except Exception:
+            self.app_icon_image = None
+
     def _build_shell(self):
         header = ttk.Frame(self.root, style="Card.TFrame", padding=18)
         header.pack(fill="x", padx=18, pady=(18, 10))
-        ttk.Label(header, text="Pomodoro Syllabus", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(header, text="Pomodoro Syllabus", style="Title.TLabel").pack(
+            anchor="w"
+        )
         ttk.Label(
             header,
             text="A cleaner study cockpit with separate flows for focus, tasks, planning, and review.",
@@ -53,7 +66,12 @@ class MainWindow:
             on_status=self.set_status,
             on_data_changed=self.refresh_views,
         )
-        self.planner_panel = PlannerPanel(self.notebook, self.task_manager)
+        self.planner_panel = PlannerPanel(
+            self.notebook,
+            self.task_manager,
+            on_status=self.set_status,
+            on_data_changed=self.refresh_views,
+        )
         self.dashboard_panel = DashboardPanel(self.notebook, self.task_manager)
 
         self.notebook.add(self.focus_panel.frame, text="Focus")
@@ -63,7 +81,9 @@ class MainWindow:
 
         status_bar = ttk.Frame(self.root, style="Card.TFrame", padding=(18, 12))
         status_bar.pack(fill="x", padx=18, pady=(0, 18))
-        ttk.Label(status_bar, textvariable=self.status_var, style="Body.TLabel").pack(anchor="w")
+        ttk.Label(status_bar, textvariable=self.status_var, style="Body.TLabel").pack(
+            anchor="w"
+        )
 
     def set_status(self, message):
         self.status_var.set(message)

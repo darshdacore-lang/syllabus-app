@@ -1,4 +1,5 @@
 import json
+import os
 from copy import deepcopy
 from pathlib import Path
 
@@ -21,11 +22,8 @@ DEFAULT_SETTINGS = {
 
 class Storage:
     def __init__(self, path=None):
-        self.path = (
-            Path(path)
-            if path
-            else Path(__file__).resolve().parent / "study_data.json"
-        )
+        configured_path = path or os.environ.get("SYLLABUS_APP_DATA_PATH")
+        self.path = Path(configured_path).expanduser() if configured_path else Path(__file__).resolve().parent / "study_data.json"
         self.data = self.load()
         self.profile = self.current_profile()
 

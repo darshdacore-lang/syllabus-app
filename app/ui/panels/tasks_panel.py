@@ -22,75 +22,147 @@ class TasksPanel:
 
     def _build(self):
         self.frame.columnconfigure(1, weight=1)
-        self.frame.rowconfigure(0, weight=1)
+        self.frame.rowconfigure(1, weight=1)
+        self.status_filter = tk.StringVar(value="open")
 
         composer = ttk.LabelFrame(
             self.frame,
-            text="Task Composer",
+            text="Quick Task Add",
             style="Section.TLabelframe",
-            padding=16,
+            padding=14,
         )
         composer.grid(row=0, column=0, sticky="nsw", padx=(0, 12))
         composer.columnconfigure(0, weight=1)
 
-        ttk.Label(composer, text="Title", style="Body.TLabel").grid(row=0, column=0, sticky="w", pady=4)
-        ttk.Entry(composer, textvariable=self.title_var, width=28).grid(row=1, column=0, sticky="ew", pady=4)
-        ttk.Label(composer, text="Subject", style="Body.TLabel").grid(row=2, column=0, sticky="w", pady=4)
-        ttk.Entry(composer, textvariable=self.subject_var).grid(row=3, column=0, sticky="ew", pady=4)
-        ttk.Label(composer, text="Due Date (YYYY-MM-DD)", style="Body.TLabel").grid(
+        ttk.Label(composer, text="Title", style="Body.TLabel").grid(
+            row=0, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(composer, textvariable=self.title_var, width=24).grid(
+            row=1, column=0, sticky="ew", pady=4
+        )
+
+        ttk.Label(composer, text="Subject", style="Body.TLabel").grid(
+            row=2, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(composer, textvariable=self.subject_var, width=24).grid(
+            row=3, column=0, sticky="ew", pady=4
+        )
+
+        ttk.Label(composer, text="Due Date", style="Body.TLabel").grid(
             row=4, column=0, sticky="w", pady=4
         )
-        ttk.Entry(composer, textvariable=self.due_date_var).grid(row=5, column=0, sticky="ew", pady=4)
-        ttk.Label(composer, text="Tags", style="Body.TLabel").grid(row=6, column=0, sticky="w", pady=4)
-        ttk.Entry(composer, textvariable=self.tags_var).grid(row=7, column=0, sticky="ew", pady=4)
-        ttk.Label(composer, text="Details", style="Body.TLabel").grid(row=8, column=0, sticky="w", pady=4)
-        ttk.Entry(composer, textvariable=self.details_var).grid(row=9, column=0, sticky="ew", pady=4)
-        ttk.Button(composer, text="Add Task", style="Accent.TButton", command=self.add_task).grid(
-            row=10, column=0, sticky="ew", pady=(12, 4)
+        ttk.Entry(composer, textvariable=self.due_date_var, width=24).grid(
+            row=5, column=0, sticky="ew", pady=4
         )
-        ttk.Label(
-            composer,
-            text="Use the task list as your source of truth, then start focus blocks from it in the Focus tab.",
-            style="Muted.TLabel",
-            wraplength=240,
-        ).grid(row=11, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(composer, text="YYYY-MM-DD", style="Muted.TLabel").grid(
+            row=6, column=0, sticky="w"
+        )
+
+        ttk.Label(composer, text="Tags", style="Body.TLabel").grid(
+            row=7, column=0, sticky="w", pady=(12, 4)
+        )
+        ttk.Entry(composer, textvariable=self.tags_var, width=24).grid(
+            row=8, column=0, sticky="ew", pady=4
+        )
+
+        ttk.Button(
+            composer, text="Add Task", style="Accent.TButton", command=self.add_task
+        ).grid(row=9, column=0, sticky="ew", pady=(12, 4))
 
         board = ttk.LabelFrame(
             self.frame,
-            text="Task Board",
+            text="Tasks",
             style="Section.TLabelframe",
-            padding=16,
+            padding=14,
         )
-        board.grid(row=0, column=1, sticky="nsew")
+        board.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=(0, 0))
         board.columnconfigure(0, weight=1)
-        board.rowconfigure(0, weight=1)
+        board.rowconfigure(1, weight=1)
+
+        filter_bar = ttk.Frame(board, style="Card.TFrame")
+        filter_bar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        ttk.Label(filter_bar, text="Show:", style="Body.TLabel").pack(
+            side="left", padx=(0, 8)
+        )
+
+        for status_val, label in [("open", "Open"), ("done", "Done"), ("all", "All")]:
+            ttk.Radiobutton(
+                filter_bar,
+                text=label,
+                variable=self.status_filter,
+                value=status_val,
+                command=self.refresh,
+            ).pack(side="left", padx=(0, 12))
 
         self.tree = ttk.Treeview(
             board,
-            columns=("title", "subject", "due", "status", "minutes"),
+            columns=("title", "subject", "due", "minutes"),
             show="headings",
-            height=16,
+            height=14,
         )
         for column, heading, width in (
-            ("title", "Title", 220),
-            ("subject", "Subject", 120),
-            ("due", "Due", 130),
-            ("status", "Status", 90),
-            ("minutes", "Minutes", 90),
+            ("title", "Title", 240),
+            ("subject", "Subject", 100),
+            ("due", "Due", 90),
+            ("minutes", "Time", 70),
         ):
             self.tree.heading(column, text=heading)
             self.tree.column(column, width=width, anchor="w")
-        self.tree.grid(row=0, column=0, sticky="nsew")
+        self.tree.grid(row=1, column=0, sticky="nsew")
+        self.tree.bind("<Double-1>", self._on_tree_double_click)
 
         actions = ttk.Frame(board, style="Card.TFrame")
-        actions.grid(row=1, column=0, sticky="ew", pady=(12, 0))
-        ttk.Button(actions, text="Mark Done", style="Subtle.TButton", command=lambda: self.set_selected_status("done")).pack(
-            side="left", padx=(0, 8)
-        )
-        ttk.Button(actions, text="Reopen", style="Subtle.TButton", command=lambda: self.set_selected_status("open")).pack(
-            side="left", padx=(0, 8)
-        )
-        ttk.Button(actions, text="Refresh", style="Subtle.TButton", command=self.refresh).pack(side="left")
+        actions.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        ttk.Button(
+            actions,
+            text="✓ Mark Done",
+            style="Success.TButton",
+            command=lambda: self.set_selected_status("done"),
+        ).pack(side="left", padx=(0, 6))
+        ttk.Button(
+            actions,
+            text="↻ Reopen",
+            style="Subtle.TButton",
+            command=lambda: self.set_selected_status("open"),
+        ).pack(side="left", padx=(0, 6))
+        ttk.Button(
+            actions,
+            text="🗑 Delete",
+            style="Subtle.TButton",
+            command=self._delete_selected,
+        ).pack(side="left")
+
+    def _on_tree_double_click(self, event):
+        """Edit task on double-click."""
+        selection = self.tree.selection()
+        if not selection:
+            return
+        task_id = int(selection[0])
+        for task in self.task_manager.list_tasks(include_done=True):
+            if task["id"] == task_id:
+                self.title_var.set(task.get("title", ""))
+                self.subject_var.set(task.get("subject", "General"))
+                self.due_date_var.set(task.get("due_date", ""))
+                self.tags_var.set(
+                    ", ".join(task.get("tags", [])) if task.get("tags") else ""
+                )
+                self.on_status(
+                    f"Editing: {task['title']} (delete and re-add to save changes)"
+                )
+                break
+
+    def _delete_selected(self):
+        task_id = self._selected_task_id()
+        if task_id is None:
+            self.on_status("Select a task first.")
+            return
+        try:
+            self.task_manager.delete_task(task_id)
+            self.on_status("Task deleted.")
+            self.on_data_changed()
+            self.refresh()
+        except ValueError as exc:
+            messagebox.showerror("Delete failed", str(exc))
 
     def add_task(self):
         title = self.title_var.get().strip()
@@ -140,7 +212,19 @@ class TasksPanel:
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        for task in self.task_manager.list_tasks(include_done=True):
+        filter_value = self.status_filter.get()
+        tasks = self.task_manager.list_tasks(include_done=(filter_value != "open"))
+
+        if filter_value == "open":
+            tasks = [t for t in tasks if t.get("status") == "open"]
+        elif filter_value == "done":
+            tasks = [t for t in tasks if t.get("status") == "done"]
+
+        if not tasks:
+            self.tree.insert("", "end", values=("No tasks", "-", "-", "-"))
+            return
+
+        for task in tasks:
             due = task.get("due_date") or "-"
             self.tree.insert(
                 "",
@@ -150,7 +234,6 @@ class TasksPanel:
                     task.get("title") or "-",
                     task.get("subject") or "General",
                     due,
-                    task.get("status") or "open",
                     format_minutes(task.get("minutes_logged", 0)),
                 ),
             )
