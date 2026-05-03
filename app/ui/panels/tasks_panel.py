@@ -1,0 +1,156 @@
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+from app.utils.helpers import format_minutes, parse_date
+
+
+class TasksPanel:
+    def __init__(self, parent, task_manager, on_status, on_data_changed):
+        self.task_manager = task_manager
+        self.on_status = on_status
+        self.on_data_changed = on_data_changed
+        self.frame = ttk.Frame(parent, style="App.TFrame", padding=18)
+
+        self.title_var = tk.StringVar()
+        self.subject_var = tk.StringVar(value="General")
+        self.due_date_var = tk.StringVar()
+        self.tags_var = tk.StringVar()
+        self.details_var = tk.StringVar()
+
+        self._build()
+        self.refresh()
+
+    def _build(self):
+        self.frame.columnconfigure(1, weight=1)
+        self.frame.rowconfigure(0, weight=1)
+
+        composer = ttk.LabelFrame(
+            self.frame,
+            text="Task Composer",
+            style="Section.TLabelframe",
+            padding=16,
+        )
+        composer.grid(row=0, column=0, sticky="nsw", padx=(0, 12))
+        composer.columnconfigure(0, weight=1)
+
+        ttk.Label(composer, text="Title", style="Body.TLabel").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Entry(composer, textvariable=self.title_var, width=28).grid(row=1, column=0, sticky="ew", pady=4)
+        ttk.Label(composer, text="Subject", style="Body.TLabel").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Entry(composer, textvariable=self.subject_var).grid(row=3, column=0, sticky="ew", pady=4)
+        ttk.Label(composer, text="Due Date (YYYY-MM-DD)", style="Body.TLabel").grid(
+            row=4, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(composer, textvariable=self.due_date_var).grid(row=5, column=0, sticky="ew", pady=4)
+        ttk.Label(composer, text="Tags", style="Body.TLabel").grid(row=6, column=0, sticky="w", pady=4)
+        ttk.Entry(composer, textvariable=self.tags_var).grid(row=7, column=0, sticky="ew", pady=4)
+        ttk.Label(composer, text="Details", style="Body.TLabel").grid(row=8, column=0, sticky="w", pady=4)
+        ttk.Entry(composer, textvariable=self.details_var).grid(row=9, column=0, sticky="ew", pady=4)
+        ttk.Button(composer, text="Add Task", style="Accent.TButton", command=self.add_task).grid(
+            row=10, column=0, sticky="ew", pady=(12, 4)
+        )
+        ttk.Label(
+            composer,
+            text="Use the task list as your source of truth, then start focus blocks from it in the Focus tab.",
+            style="Muted.TLabel",
+            wraplength=240,
+        ).grid(row=11, column=0, sticky="w", pady=(8, 0))
+
+        board = ttk.LabelFrame(
+            self.frame,
+            text="Task Board",
+            style="Section.TLabelframe",
+            padding=16,
+        )
+        board.grid(row=0, column=1, sticky="nsew")
+        board.columnconfigure(0, weight=1)
+        board.rowconfigure(0, weight=1)
+
+        self.tree = ttk.Treeview(
+            board,
+            columns=("title", "subject", "due", "status", "minutes"),
+            show="headings",
+            height=16,
+        )
+        for column, heading, width in (
+            ("title", "Title", 220),
+            ("subject", "Subject", 120),
+            ("due", "Due", 130),
+            ("status", "Status", 90),
+            ("minutes", "Minutes", 90),
+        ):
+            self.tree.heading(column, text=heading)
+            self.tree.column(column, width=width, anchor="w")
+        self.tree.grid(row=0, column=0, sticky="nsew")
+
+        actions = ttk.Frame(board, style="Card.TFrame")
+        actions.grid(row=1, column=0, sticky="ew", pady=(12, 0))
+        ttk.Button(actions, text="Mark Done", style="Subtle.TButton", command=lambda: self.set_selected_status("done")).pack(
+            side="left", padx=(0, 8)
+        )
+        ttk.Button(actions, text="Reopen", style="Subtle.TButton", command=lambda: self.set_selected_status("open")).pack(
+            side="left", padx=(0, 8)
+        )
+        ttk.Button(actions, text="Refresh", style="Subtle.TButton", command=self.refresh).pack(side="left")
+
+    def add_task(self):
+        title = self.title_var.get().strip()
+        due_date = self.due_date_var.get().strip()
+        if due_date and parse_date(due_date) is None:
+            messagebox.showerror("Invalid due date", "Use YYYY-MM-DD for due dates.")
+            return
+
+        try:
+            task = self.task_manager.add_task(
+                title=title,
+                subject=self.subject_var.get(),
+                details=self.details_var.get(),
+                due_date=due_date,
+                tags=self.tags_var.get(),
+            )
+        except ValueError as exc:
+            messagebox.showerror("Unable to add task", str(exc))
+            return
+
+        self.title_var.set("")
+        self.due_date_var.set("")
+        self.tags_var.set("")
+        self.details_var.set("")
+        self.on_status(f"Task added: {task['title']}")
+        self.on_data_changed()
+        self.refresh()
+
+    def _selected_task_id(self):
+        selection = self.tree.selection()
+        if not selection:
+            return None
+        return int(selection[0])
+
+    def set_selected_status(self, status):
+        task_id = self._selected_task_id()
+        if task_id is None:
+            self.on_status("Select a task first.")
+            return
+
+        task = self.task_manager.set_task_status(task_id, status)
+        self.on_status(f"Task updated: {task['title']} -> {status}")
+        self.on_data_changed()
+        self.refresh()
+
+    def refresh(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        for task in self.task_manager.list_tasks(include_done=True):
+            due = task.get("due_date") or "-"
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(task["id"]),
+                values=(
+                    task.get("title") or "-",
+                    task.get("subject") or "General",
+                    due,
+                    task.get("status") or "open",
+                    format_minutes(task.get("minutes_logged", 0)),
+                ),
+            )

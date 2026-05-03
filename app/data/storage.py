@@ -3,7 +3,11 @@ from copy import deepcopy
 from pathlib import Path
 
 
-DEFAULT_GOALS = {"subject_minutes": {}}
+DEFAULT_GOALS = {
+    "daily_minutes": 120,
+    "weekly_sessions": 10,
+    "subject_minutes": {},
+}
 DEFAULT_SETTINGS = {
     "breaks_enabled": True,
     "notifications_enabled": True,
@@ -20,7 +24,7 @@ class Storage:
         self.path = (
             Path(path)
             if path
-            else Path(__file__).resolve().parents[2] / "study_data.json"
+            else Path(__file__).resolve().parent / "study_data.json"
         )
         self.data = self.load()
         self.profile = self.current_profile()
@@ -28,6 +32,7 @@ class Storage:
     def default_profile(self, name="Default"):
         return {
             "name": name,
+            "user_name": name,
             "active_session": None,
             "sessions": [],
             "tasks": [],
@@ -97,6 +102,18 @@ class Storage:
 
     def current_profile(self):
         return self.data["profiles"][self.data["current_profile"]]
+
+    def get_collection(self, key):
+        value = self.profile.get(key)
+        if not isinstance(value, list):
+            value = []
+            self.profile[key] = value
+        return value
+
+    def set_collection(self, key, items):
+        self.profile[key] = list(items)
+        self.save()
+        return self.profile[key]
 
     def save(self):
         self.data["profiles"][self.data["current_profile"]] = self.profile

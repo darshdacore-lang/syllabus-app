@@ -1,5 +1,4 @@
-from datetime import datetime
-from app.utils.helpers import safe_int
+from app.utils.helpers import now_iso, now_local, parse_iso_datetime, safe_float, safe_int
 
 
 class SessionEngine:
@@ -13,8 +12,14 @@ class SessionEngine:
     def get_active(self):
         return self.profile.get("active_session")
 
+    def _current_time(self):
+        return now_local()
+
     def _now(self):
-        return datetime.now().isoformat()
+        return now_iso()
+
+    def _parse_timestamp(self, value):
+        return parse_iso_datetime(value) or self._current_time()
 
     def _build_break_plan(self, override=None):
         settings = self.profile.get("settings", {})
@@ -35,7 +40,15 @@ class SessionEngine:
     # ─────────────────────────────
     # START FOCUS
     # ─────────────────────────────
-    def start_focus(self, subject, minutes, task=None, tags=None, break_plan=None):
+    def start_focus(
+        self,
+        subject,
+        minutes,
+        task=None,
+        task_id=None,
+        tags=None,
+        break_plan=None,
+    ):
         minutes = safe_int(minutes, 0)
         if minutes <= 0:
             raise ValueError("Minutes must be a positive number.")
@@ -61,6 +74,8 @@ class SessionEngine:
             "updated_at": now,
             "session_type": "focus",
             "task": (task or "").strip() or None,
+            "task_title": (task or "").strip() or None,
+            "task_id": safe_int(task_id, 0) or None,
             "tags": cleaned_tags,
             "distractions": [],
             "cycle_count": cycle_count,
@@ -98,9 +113,9 @@ class SessionEngine:
         if active.get("state") != "running":
             return active
 
-        last = datetime.fromisoformat(active.get("updated_at") or self._now())
-        now = datetime.now()
-        elapsed = int((now - last).total_seconds())
+        last = self._parse_timestamp(active.get("updated_at"))
+        now = self._current_time()
+        elapsed = max(0, int((now - last).total_seconds()))
 
         if elapsed > 0:
             active["remaining_seconds"] = max(
@@ -132,10 +147,12 @@ class SessionEngine:
         session["cycle_count"] = completed_cycle
         session["remaining_seconds"] = remaining_seconds
         session["studied_minutes"] = round((total_seconds - remaining_seconds) / 60, 2)
+        session["task_title"] = session.get("task_title") or session.get("task")
 
         self.profile.setdefault("sessions", []).append(session)
         self.profile["active_session"] = None
         self.profile["focus_cycle_count"] = completed_cycle
+        self._apply_task_progress(session.get("task_id"), session["studied_minutes"])
 
         self.storage.save()
 
@@ -178,3 +195,36 @@ class SessionEngine:
 
         self.storage.save()
         return self.profile["active_session"]
+
+    def next_break_preview(self, active=None):
+        active = active or self.get_active()
+        plan = self._build_break_plan((active or {}).get("break_plan"))
+
+        if active and active.get("session_type") == "focus":
+            next_cycle = safe_int(active.get("cycle_count"), 0) + 1
+        else:
+            next_cycle = safe_int(self.profile.get("focus_cycle_count"), 0) + 1
+
+        is_long = next_cycle % plan["long_break_after"] == 0
+        minutes = plan["long_break" if is_long else "short_break"]
+        label = "Long Break" if is_long else "Short Break"
+        return {
+            "cycle": next_cycle,
+            "minutes": minutes,
+            "label": f"{label} after cycle {next_cycle}: {minutes} min",
+            "is_long": is_long,
+        }
+
+    def _apply_task_progress(self, task_id, studied_minutes):
+        task_id = safe_int(task_id, 0)
+        if task_id <= 0:
+            return
+
+        for task in self.storage.get_collection("tasks"):
+            if safe_int(task.get("id"), 0) != task_id:
+                continue
+            task["minutes_logged"] = round(
+                safe_float(task.get("minutes_logged"), 0.0) + safe_float(studied_minutes),
+                2,
+            )
+            break
