@@ -10,9 +10,10 @@ WINDOW_SIZE = "1080x760"
 
 
 class MainWindow:
-    def __init__(self, session_engine, task_manager):
+    def __init__(self, session_engine, task_manager, agent):
         self.engine = session_engine
         self.task_manager = task_manager
+        self.agent = agent
 
         self.root = tk.Tk()
         self.root.tk.call("tk", "appname", APP_NAME)
@@ -55,24 +56,29 @@ class MainWindow:
 
         self.focus_panel = FocusPanel(
             self.notebook,
+            self.agent,
             self.engine,
             self.task_manager,
-            on_status=self.set_status,
-            on_data_changed=self.refresh_views,
+            self.set_status,
+            self.refresh_views,
         )
         self.tasks_panel = TasksPanel(
             self.notebook,
+            self.agent,
             self.task_manager,
-            on_status=self.set_status,
-            on_data_changed=self.refresh_views,
+            self.set_status,
+            self.refresh_views,
         )
         self.planner_panel = PlannerPanel(
             self.notebook,
+            self.agent,
             self.task_manager,
-            on_status=self.set_status,
-            on_data_changed=self.refresh_views,
+            self.set_status,
+            self.refresh_views,
         )
-        self.dashboard_panel = DashboardPanel(self.notebook, self.task_manager)
+        self.dashboard_panel = DashboardPanel(
+            self.notebook, self.agent, self.task_manager
+        )
 
         self.notebook.add(self.focus_panel.frame, text="Focus")
         self.notebook.add(self.tasks_panel.frame, text="Tasks")

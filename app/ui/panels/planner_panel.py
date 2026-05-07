@@ -5,7 +5,8 @@ from app.utils.helpers import parse_date, safe_int
 
 
 class PlannerPanel:
-    def __init__(self, parent, task_manager, on_status, on_data_changed):
+    def __init__(self, parent, agent, task_manager, on_status, on_data_changed):
+        self.agent = agent
         self.task_manager = task_manager
         self.on_status = on_status
         self.on_data_changed = on_data_changed
@@ -84,16 +85,22 @@ class PlannerPanel:
             width_map={"subject": 160, "topic": 240, "progress": 100},
         )
 
-    def _build_editor_tab(self, parent, title, form_builder, columns, headings, width_map):
+    def _build_editor_tab(
+        self, parent, title, form_builder, columns, headings, width_map
+    ):
         parent.columnconfigure(1, weight=1)
         parent.rowconfigure(0, weight=1)
 
-        composer = ttk.LabelFrame(parent, text=title, style="Section.TLabelframe", padding=16)
+        composer = ttk.LabelFrame(
+            parent, text=title, style="Section.TLabelframe", padding=16
+        )
         composer.grid(row=0, column=0, sticky="nsw", padx=(0, 12))
         composer.columnconfigure(0, weight=1)
         form_builder(composer)
 
-        board = ttk.LabelFrame(parent, text=f"{title} Board", style="Section.TLabelframe", padding=16)
+        board = ttk.LabelFrame(
+            parent, text=f"{title} Board", style="Section.TLabelframe", padding=16
+        )
         board.grid(row=0, column=1, sticky="nsew")
         board.columnconfigure(0, weight=1)
         board.rowconfigure(0, weight=1)
@@ -106,23 +113,53 @@ class PlannerPanel:
         return tree
 
     def _build_plan_form(self, frame):
-        ttk.Label(frame, text="Subject", style="Body.TLabel").grid(row=0, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.plan_subject_var).grid(row=1, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Days (comma-separated)", style="Body.TLabel").grid(row=2, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.plan_days_var).grid(row=3, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Time", style="Body.TLabel").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.plan_time_var).grid(row=5, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Minutes", style="Body.TLabel").grid(row=6, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.plan_minutes_var).grid(row=7, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Notes", style="Body.TLabel").grid(row=8, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.plan_notes_var).grid(row=9, column=0, sticky="ew", pady=4)
-        ttk.Button(frame, text="Save Plan", style="Accent.TButton", command=self.save_plan).grid(
-            row=10, column=0, sticky="ew", pady=(12, 4)
+        ttk.Label(frame, text="Subject", style="Body.TLabel").grid(
+            row=0, column=0, sticky="w", pady=4
         )
+        ttk.Entry(frame, textvariable=self.plan_subject_var).grid(
+            row=1, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Days (comma-separated)", style="Body.TLabel").grid(
+            row=2, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.plan_days_var).grid(
+            row=3, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Time", style="Body.TLabel").grid(
+            row=4, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.plan_time_var).grid(
+            row=5, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Minutes", style="Body.TLabel").grid(
+            row=6, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.plan_minutes_var).grid(
+            row=7, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Notes", style="Body.TLabel").grid(
+            row=8, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.plan_notes_var).grid(
+            row=9, column=0, sticky="ew", pady=4
+        )
+        ttk.Button(
+            frame, text="Save Plan", style="Accent.TButton", command=self.save_plan
+        ).grid(row=10, column=0, sticky="ew", pady=(12, 4))
         action_row = ttk.Frame(frame, style="Card.TFrame")
         action_row.grid(row=11, column=0, sticky="ew", pady=(4, 0))
-        ttk.Button(action_row, text="Clear", style="Subtle.TButton", command=self.clear_plan_form).pack(side="left", padx=(0, 8))
-        ttk.Button(action_row, text="Delete Selected", style="Subtle.TButton", command=self.delete_plan).pack(side="left")
+        ttk.Button(
+            action_row,
+            text="Clear",
+            style="Subtle.TButton",
+            command=self.clear_plan_form,
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(
+            action_row,
+            text="Delete Selected",
+            style="Subtle.TButton",
+            command=self.delete_plan,
+        ).pack(side="left")
         ttk.Label(
             frame,
             text="Tip: days can be like Mon, Wed, Fri and time can stay blank if you only want a loose plan.",
@@ -131,40 +168,96 @@ class PlannerPanel:
         ).grid(row=12, column=0, sticky="w", pady=(10, 0))
 
     def _build_exam_form(self, frame):
-        ttk.Label(frame, text="Exam Name", style="Body.TLabel").grid(row=0, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.exam_name_var).grid(row=1, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Subject", style="Body.TLabel").grid(row=2, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.exam_subject_var).grid(row=3, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Date (YYYY-MM-DD)", style="Body.TLabel").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.exam_date_var).grid(row=5, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Target Minutes", style="Body.TLabel").grid(row=6, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.exam_target_minutes_var).grid(row=7, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Notes", style="Body.TLabel").grid(row=8, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.exam_notes_var).grid(row=9, column=0, sticky="ew", pady=4)
-        ttk.Button(frame, text="Save Exam", style="Accent.TButton", command=self.save_exam).grid(
-            row=10, column=0, sticky="ew", pady=(12, 4)
+        ttk.Label(frame, text="Exam Name", style="Body.TLabel").grid(
+            row=0, column=0, sticky="w", pady=4
         )
+        ttk.Entry(frame, textvariable=self.exam_name_var).grid(
+            row=1, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Subject", style="Body.TLabel").grid(
+            row=2, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.exam_subject_var).grid(
+            row=3, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Date (YYYY-MM-DD)", style="Body.TLabel").grid(
+            row=4, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.exam_date_var).grid(
+            row=5, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Target Minutes", style="Body.TLabel").grid(
+            row=6, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.exam_target_minutes_var).grid(
+            row=7, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Notes", style="Body.TLabel").grid(
+            row=8, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.exam_notes_var).grid(
+            row=9, column=0, sticky="ew", pady=4
+        )
+        ttk.Button(
+            frame, text="Save Exam", style="Accent.TButton", command=self.save_exam
+        ).grid(row=10, column=0, sticky="ew", pady=(12, 4))
         action_row = ttk.Frame(frame, style="Card.TFrame")
         action_row.grid(row=11, column=0, sticky="ew", pady=(4, 0))
-        ttk.Button(action_row, text="Clear", style="Subtle.TButton", command=self.clear_exam_form).pack(side="left", padx=(0, 8))
-        ttk.Button(action_row, text="Delete Selected", style="Subtle.TButton", command=self.delete_exam).pack(side="left")
+        ttk.Button(
+            action_row,
+            text="Clear",
+            style="Subtle.TButton",
+            command=self.clear_exam_form,
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(
+            action_row,
+            text="Delete Selected",
+            style="Subtle.TButton",
+            command=self.delete_exam,
+        ).pack(side="left")
 
     def _build_topic_form(self, frame):
-        ttk.Label(frame, text="Subject", style="Body.TLabel").grid(row=0, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.topic_subject_var).grid(row=1, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Topic", style="Body.TLabel").grid(row=2, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.topic_name_var).grid(row=3, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Progress %", style="Body.TLabel").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.topic_progress_var).grid(row=5, column=0, sticky="ew", pady=4)
-        ttk.Label(frame, text="Notes", style="Body.TLabel").grid(row=6, column=0, sticky="w", pady=4)
-        ttk.Entry(frame, textvariable=self.topic_notes_var).grid(row=7, column=0, sticky="ew", pady=4)
-        ttk.Button(frame, text="Save Topic", style="Accent.TButton", command=self.save_topic).grid(
-            row=8, column=0, sticky="ew", pady=(12, 4)
+        ttk.Label(frame, text="Subject", style="Body.TLabel").grid(
+            row=0, column=0, sticky="w", pady=4
         )
+        ttk.Entry(frame, textvariable=self.topic_subject_var).grid(
+            row=1, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Topic", style="Body.TLabel").grid(
+            row=2, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.topic_name_var).grid(
+            row=3, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Progress %", style="Body.TLabel").grid(
+            row=4, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.topic_progress_var).grid(
+            row=5, column=0, sticky="ew", pady=4
+        )
+        ttk.Label(frame, text="Notes", style="Body.TLabel").grid(
+            row=6, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(frame, textvariable=self.topic_notes_var).grid(
+            row=7, column=0, sticky="ew", pady=4
+        )
+        ttk.Button(
+            frame, text="Save Topic", style="Accent.TButton", command=self.save_topic
+        ).grid(row=8, column=0, sticky="ew", pady=(12, 4))
         action_row = ttk.Frame(frame, style="Card.TFrame")
         action_row.grid(row=9, column=0, sticky="ew", pady=(4, 0))
-        ttk.Button(action_row, text="Clear", style="Subtle.TButton", command=self.clear_topic_form).pack(side="left", padx=(0, 8))
-        ttk.Button(action_row, text="Delete Selected", style="Subtle.TButton", command=self.delete_topic).pack(side="left")
+        ttk.Button(
+            action_row,
+            text="Clear",
+            style="Subtle.TButton",
+            command=self.clear_topic_form,
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(
+            action_row,
+            text="Delete Selected",
+            style="Subtle.TButton",
+            command=self.delete_topic,
+        ).pack(side="left")
 
     def refresh(self):
         snapshot = self.task_manager.planner_snapshot()
@@ -179,7 +272,12 @@ class PlannerPanel:
                 "",
                 "end",
                 iid=str(plan["id"]),
-                values=(plan["subject"], plan["schedule"], plan["time"], f"{plan['minutes']} min"),
+                values=(
+                    plan["subject"],
+                    plan["schedule"],
+                    plan["time"],
+                    f"{plan['minutes']} min",
+                ),
             )
         self.plan_tree.bind("<<TreeviewSelect>>", self.load_selected_plan)
 
@@ -190,7 +288,12 @@ class PlannerPanel:
                 "",
                 "end",
                 iid=str(exam["id"]),
-                values=(exam["name"], exam["subject"], exam["date"] or "-", exam["countdown"]),
+                values=(
+                    exam["name"],
+                    exam["subject"],
+                    exam["date"] or "-",
+                    exam["countdown"],
+                ),
             )
         self.exam_tree.bind("<<TreeviewSelect>>", self.load_selected_exam)
 
@@ -258,7 +361,10 @@ class PlannerPanel:
             break
 
     def save_exam(self):
-        if self.exam_date_var.get().strip() and parse_date(self.exam_date_var.get().strip()) is None:
+        if (
+            self.exam_date_var.get().strip()
+            and parse_date(self.exam_date_var.get().strip()) is None
+        ):
             messagebox.showerror("Invalid exam date", "Use YYYY-MM-DD for exam dates.")
             return
 
@@ -312,7 +418,9 @@ class PlannerPanel:
     def save_topic(self):
         progress = safe_int(self.topic_progress_var.get(), -1)
         if progress < 0 or progress > 100:
-            messagebox.showerror("Invalid progress", "Topic progress must be between 0 and 100.")
+            messagebox.showerror(
+                "Invalid progress", "Topic progress must be between 0 and 100."
+            )
             return
 
         record = self.task_manager.save_topic(

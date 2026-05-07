@@ -1,3 +1,4 @@
+from .agent import Agent
 from .storage import Storage
 
-__all__ = ["Storage"]
+__all__ = ["Agent", "Storage"]

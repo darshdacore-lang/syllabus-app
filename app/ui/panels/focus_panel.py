@@ -27,8 +27,9 @@ PRESETS = {
 
 class FocusPanel:
     def __init__(
-        self, parent, session_engine, task_manager, on_status, on_data_changed
+        self, parent, agent, session_engine, task_manager, on_status, on_data_changed
     ):
+        self.agent = agent
         self.engine = session_engine
         self.task_manager = task_manager
         self.on_status = on_status
@@ -376,9 +377,10 @@ class FocusPanel:
         tags = parse_tags(self.tags_var.get())
 
         try:
-            active = self.engine.start_focus(
-                subject,
-                minutes,
+            active = self.agent.handle_command(
+                "start_focus",
+                subject=subject,
+                minutes=minutes,
                 task=task_title,
                 task_id=task_id,
                 tags=tags,
@@ -387,7 +389,7 @@ class FocusPanel:
         except (RuntimeError, ValueError) as exc:
             messagebox.showinfo("Unable to start session", str(exc))
             self.on_status(str(exc))
-            self.update_display(self.engine.get_active())
+            self.update_display(self.agent.handle_command("get_active"))
             return
 
         self.on_status(f"Custom focus started for {subject} ({minutes} min).")
@@ -395,19 +397,19 @@ class FocusPanel:
         self.update_display(active)
 
     def toggle_pause(self):
-        active = self.engine.get_active()
+        active = self.agent.handle_command("get_active")
         if not active:
             return
 
         if active.get("state") == "running":
-            self.engine.pause()
+            self.agent.handle_command("pause")
             self.on_status("Session paused.")
         else:
-            self.engine.resume()
+            self.agent.handle_command("resume")
             self.on_status("Session resumed.")
 
         self.on_data_changed()
-        self.update_display(self.engine.get_active())
+        self.update_display(self.agent.handle_command("get_active"))
 
     def finish_focus(self):
         active = self.engine.get_active()
@@ -440,9 +442,7 @@ class FocusPanel:
         except ValueError:
             current_plan = None
 
-        preview = self.engine.next_break_preview(
-            active, break_plan=current_plan if not active else None
-        )
+        preview = self.agent.handle_command("next_break_preview")
         self.break_preview_var.set(preview["label"])
 
         if not active:

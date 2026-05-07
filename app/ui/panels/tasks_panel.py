@@ -5,7 +5,8 @@ from app.utils.helpers import format_minutes, parse_date
 
 
 class TasksPanel:
-    def __init__(self, parent, task_manager, on_status, on_data_changed):
+    def __init__(self, parent, agent, task_manager, on_status, on_data_changed):
+        self.agent = agent
         self.task_manager = task_manager
         self.on_status = on_status
         self.on_data_changed = on_data_changed
@@ -157,7 +158,7 @@ class TasksPanel:
             self.on_status("Select a task first.")
             return
         try:
-            self.task_manager.delete_task(task_id)
+            self.agent.handle_command("delete_task", task_id=task_id)
             self.on_status("Task deleted.")
             self.on_data_changed()
             self.refresh()
@@ -172,7 +173,8 @@ class TasksPanel:
             return
 
         try:
-            task = self.task_manager.add_task(
+            task = self.agent.handle_command(
+                "add_task",
                 title=title,
                 subject=self.subject_var.get(),
                 details=self.details_var.get(),
@@ -203,7 +205,10 @@ class TasksPanel:
             self.on_status("Select a task first.")
             return
 
-        task = self.task_manager.set_task_status(task_id, status)
+        if status == "done":
+            task = self.agent.handle_command("mark_done", task_id=task_id)
+        else:
+            task = self.task_manager.set_task_status(task_id, status)
         self.on_status(f"Task updated: {task['title']} -> {status}")
         self.on_data_changed()
         self.refresh()

@@ -4,12 +4,11 @@ from app.utils.helpers import format_minutes
 
 
 class DashboardPanel:
-    def __init__(self, parent, task_manager):
+    def __init__(self, parent, agent, task_manager):
+        self.agent = agent
         self.task_manager = task_manager
         self.frame = ttk.Frame(parent, style="App.TFrame", padding=18)
         self.metric_vars = {}
-        self.headline_var = None
-        self.next_exam_var = None
         self._build()
         self.refresh()
 
@@ -40,10 +39,16 @@ class DashboardPanel:
             )
         ):
             card = ttk.Frame(metric_row, style="Card.TFrame", padding=16)
-            card.grid(row=0, column=index, sticky="nsew", padx=(0, 10) if index < 3 else 0)
-            self.metric_vars[key] = ttk.Label(card, text="0", style="MetricValue.TLabel")
+            card.grid(
+                row=0, column=index, sticky="nsew", padx=(0, 10) if index < 3 else 0
+            )
+            self.metric_vars[key] = ttk.Label(
+                card, text="0", style="MetricValue.TLabel"
+            )
             self.metric_vars[key].pack(anchor="w")
-            ttk.Label(card, text=label, style="MetricLabel.TLabel").pack(anchor="w", pady=(4, 0))
+            ttk.Label(card, text=label, style="MetricLabel.TLabel").pack(
+                anchor="w", pady=(4, 0)
+            )
 
         recent_card = ttk.LabelFrame(
             self.frame,
@@ -91,11 +96,17 @@ class DashboardPanel:
         self.subject_tree.grid(row=0, column=0, sticky="nsew")
 
     def refresh(self):
-        summary = self.task_manager.dashboard_summary()
-        self.metric_vars["today_minutes"].configure(text=format_minutes(summary["today_minutes"]))
-        self.metric_vars["today_sessions"].configure(text=str(summary["today_sessions"]))
+        summary = self.agent.handle_command("dashboard_summary")
+        self.metric_vars["today_minutes"].configure(
+            text=format_minutes(summary["today_minutes"])
+        )
+        self.metric_vars["today_sessions"].configure(
+            text=str(summary["today_sessions"])
+        )
         self.metric_vars["open_tasks"].configure(text=str(summary["open_tasks"]))
-        self.metric_vars["total_minutes"].configure(text=str(int(summary["total_minutes"])))
+        self.metric_vars["total_minutes"].configure(
+            text=str(int(summary["total_minutes"]))
+        )
         self.headline_var.configure(text=summary["headline"])
 
         next_exam = summary["next_exam"]
@@ -137,4 +148,6 @@ class DashboardPanel:
             return
 
         for subject, minutes in subjects:
-            self.subject_tree.insert("", "end", values=(subject, format_minutes(minutes)))
+            self.subject_tree.insert(
+                "", "end", values=(subject, format_minutes(minutes))
+            )
