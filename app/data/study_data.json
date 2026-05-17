@@ -4,7 +4,28 @@
     "Default": {
       "name": "Default",
       "user_name": "Default",
-      "active_session": null,
+      "active_session": {
+        "subject": "General",
+        "planned_minutes": 1,
+        "total_seconds": 60,
+        "remaining_seconds": 0,
+        "state": "running",
+        "started_at": "2026-05-11T20:24:29.561546",
+        "updated_at": "2026-05-16T13:05:32.491975",
+        "session_type": "focus",
+        "task": null,
+        "task_title": null,
+        "task_id": null,
+        "tags": [],
+        "distractions": [],
+        "cycle_count": 0,
+        "break_plan": {
+          "short_break": 5,
+          "long_break": 15,
+          "long_break_after": 4,
+          "enabled": true
+        }
+      },
       "sessions": [],
       "tasks": [
         {
@@ -36,6 +57,18 @@
           "details": "",
           "status": "open",
           "minutes_logged": 0
+        },
+        {
+          "id": 4,
+          "title": "Maths Finals FINAL prep",
+          "subject": "Maths",
+          "due_date": "2026-05-22",
+          "tags": [
+            "red"
+          ],
+          "details": "",
+          "status": "open",
+          "minutes_logged": 0
         }
       ],
       "plans": [],
@@ -57,7 +90,7 @@
         "sound_cues": true
       },
       "focus_cycle_count": 0,
-      "next_task_id": 4,
+      "next_task_id": 5,
       "next_plan_id": 1,
       "next_template_id": 1,
       "next_exam_id": 1,

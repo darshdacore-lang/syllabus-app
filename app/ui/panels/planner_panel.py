@@ -1,5 +1,12 @@
+import sys
+from pathlib import Path
+
 import tkinter as tk
 from tkinter import messagebox, ttk
+
+ROOT_DIR = Path(__file__).resolve().parents[3]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from app.utils.helpers import parse_date, safe_int
 

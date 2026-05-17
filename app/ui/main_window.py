@@ -1,7 +1,14 @@
+import sys
+from pathlib import Path
+
 import tkinter as tk
 from tkinter import ttk
 
-from app.metadata import APP_NAME
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+APP_NAME = "Pomodoro Syllabus"
 from app.ui.app_icon import build_photo_image
 from app.ui.panels import DashboardPanel, FocusPanel, PlannerPanel, TasksPanel
 from app.ui.theme import configure_styles
@@ -112,18 +119,14 @@ class MainWindow:
         self.tasks_panel.refresh()
         self.planner_panel.refresh()
         self.dashboard_panel.refresh()
-        self._active_context = self._current_context(active)
+
+    def update_display(self, active):
+        # MainWindow does not show its own timer; refresh child panels instead.
+        self.refresh_views()
 
     def tick_loop(self):
         active = self.engine.tick()
-        context = self._current_context(active)
-
-        if context != self._active_context:
-            self.refresh_views()
-        else:
-            self.focus_panel.update_display(active)
-            self.dashboard_panel.refresh()
-
+        self.focus_panel.update_display(active)
         self.root.after(1000, self.tick_loop)
 
     def run(self):

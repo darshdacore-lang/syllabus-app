@@ -1,4 +1,17 @@
-from app.utils.helpers import now_iso, now_local, parse_iso_datetime, safe_float, safe_int
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from app.utils.helpers import (
+    now_iso,
+    now_local,
+    parse_iso_datetime,
+    safe_float,
+    safe_int,
+)
 
 
 class SessionEngine:
@@ -104,22 +117,7 @@ class SessionEngine:
     # ─────────────────────────────
     # PAUSE / RESUME
     # ─────────────────────────────
-    def pause(self):
-        active = self.get_active()
-        if active and active.get("state") == "running":
-            active["state"] = "paused"
-            active["updated_at"] = self._now()
-            self.storage.save()
-
-    def resume(self):
-        active = self.get_active()
-        if active and active.get("state") == "paused":
-            active["state"] = "running"
-            active["updated_at"] = self._now()
-            self.storage.save()
-
-    # ─────────────────────────────
-    # MAIN TIMER TICK
+    # TICK (CORE LOOP)
     # ─────────────────────────────
     def tick(self):
         active = self.get_active()
@@ -138,41 +136,10 @@ class SessionEngine:
                 0,
                 safe_int(active["remaining_seconds"]) - elapsed,
             )
-            active["updated_at"] = now.isoformat()
+            active["updated_at"] = self._now()
             self.storage.save()
 
-        if active["remaining_seconds"] <= 0:
-            if active.get("session_type") == "focus":
-                return self.complete_focus(active)
-            else:
-                return self.complete_break(active)
-
         return active
-
-    # ─────────────────────────────
-    # COMPLETE FOCUS
-    # ─────────────────────────────
-    def complete_focus(self, active):
-        session = dict(active)
-        total_seconds = max(1, safe_int(session.get("total_seconds"), 0))
-        remaining_seconds = max(0, safe_int(session.get("remaining_seconds"), 0))
-        completed_cycle = safe_int(session.get("cycle_count"), 0) + 1
-
-        session["status"] = "completed"
-        session["ended_at"] = self._now()
-        session["cycle_count"] = completed_cycle
-        session["remaining_seconds"] = remaining_seconds
-        session["studied_minutes"] = round((total_seconds - remaining_seconds) / 60, 2)
-        session["task_title"] = session.get("task_title") or session.get("task")
-
-        self.profile.setdefault("sessions", []).append(session)
-        self.profile["active_session"] = None
-        self.profile["focus_cycle_count"] = completed_cycle
-        self._apply_task_progress(session.get("task_id"), session["studied_minutes"])
-
-        self.storage.save()
-
-        return self.start_break(session)
 
     # ─────────────────────────────
     # COMPLETE BREAK
@@ -187,7 +154,9 @@ class SessionEngine:
     # ─────────────────────────────
     def start_break(self, focus_session):
         plan = self._build_break_plan(focus_session.get("break_plan"))
-        if not bool(self.profile.get("settings", {}).get("breaks_enabled", plan["enabled"])):
+        if not bool(
+            self.profile.get("settings", {}).get("breaks_enabled", plan["enabled"])
+        ):
             return None
 
         cycle = max(1, safe_int(focus_session.get("cycle_count"), 0))
@@ -214,7 +183,9 @@ class SessionEngine:
 
     def next_break_preview(self, active=None, break_plan=None):
         active = active or self.get_active()
-        override = break_plan if break_plan is not None else (active or {}).get("break_plan")
+        override = (
+            break_plan if break_plan is not None else (active or {}).get("break_plan")
+        )
         plan = self._build_break_plan(override)
 
         if active and active.get("session_type") == "focus":
@@ -241,7 +212,8 @@ class SessionEngine:
             if safe_int(task.get("id"), 0) != task_id:
                 continue
             task["minutes_logged"] = round(
-                safe_float(task.get("minutes_logged"), 0.0) + safe_float(studied_minutes),
+                safe_float(task.get("minutes_logged"), 0.0)
+                + safe_float(studied_minutes),
                 2,
             )
             break
