@@ -1,4 +1,30 @@
+# 📦 Dependencies (MOST IMPORTANT)
 node_modules/
+
+# ⚙️ Build outputs
 dist/
 out/
+build/
+
+# 🧠 Electron cache / runtime
+*.log
+*.cache
+
+# 🍎 macOS system files
 .DS_Store
+
+# 🔐 Environment variables
+.env
+.env.local
+
+# 📁 Optional: coverage reports
+coverage/
+
+# 🧪 Debug logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ⚡ Vite / bundlers (if used)
+.vite/
+.parcel-cache/
