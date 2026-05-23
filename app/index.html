@@ -1,21 +1,212 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <title>Test</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>25:00 — Pomodoro</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #0f0f0f;
+            color: white;
+            font-family: system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        /* Mode buttons */
+        .mode-bar {
+            display: flex;
+            gap: 8px;
+        }
+
+        .mode-btn {
+            padding: 7px 18px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: transparent;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .mode-btn:hover {
+            border-color: rgba(255, 255, 255, 0.4);
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .mode-btn.active {
+            background: rgba(255, 255, 255, 0.12);
+            color: white;
+            border-color: rgba(255, 255, 255, 0.4);
+            font-weight: 500;
+        }
+
+        /* Timer display */
+        #timer {
+            font-size: 96px;
+            font-weight: 500;
+            letter-spacing: -3px;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+
+        /* Status label */
+        #status {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.45);
+            min-height: 20px;
+            letter-spacing: 0.02em;
+        }
+
+        /* Action buttons */
+        .buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        button.action {
+            padding: 13px 28px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: opacity 0.15s, transform 0.1s;
+        }
+
+        button.action:active {
+            opacity: 0.75;
+            transform: scale(0.97);
+        }
+
+        .start {
+            background: #22c55e;
+            color: #052e16;
+        }
+
+        .pause {
+            background: #f59e0b;
+            color: #2d1a00;
+        }
+
+        .reset {
+            background: #27272a;
+            color: white;
+        }
+    </style>
 </head>
 
-<body
-    style="margin:0; display:flex; align-items:center; justify-content:center; min-height:100vh; background:#ffea00; color:#000; font-family:sans-serif;">
-    <div
-        style="text-align:center; padding:24px; border:4px solid #000; background:#fff; box-shadow:0 0 0 8px rgba(0,0,0,0.12);">
-        <h1 style="margin:0; font-size:3rem;">RENDER TEST: VISIBLE</h1>
-        <p style="margin:12px 0 0; font-size:1.25rem;">If you see this, the renderer is working.</p>
+<body>
+
+    <div class="mode-bar">
+        <button class="mode-btn active" onclick="setMode(25, 'Pomodoro', this)">Pomodoro</button>
+        <button class="mode-btn" onclick="setMode(5, 'Short break', this)">Short break</button>
+        <button class="mode-btn" onclick="setMode(15, 'Long break', this)">Long break</button>
+    </div>
+
+    <div id="timer">25:00</div>
+    <div id="status">Ready</div>
+
+    <div class="buttons">
+        <button class="action start" id="startPauseBtn" onclick="toggleTimer()">Start</button>
+        <button class="action reset" onclick="resetTimer()">Reset</button>
     </div>
 
     <script>
-        console.log("Renderer alive");
+        let totalSeconds = 25 * 60;
+        let defaultSeconds = 25 * 60;
+        let timerInterval = null;
+        let running = false;
+        let modeName = 'Pomodoro';
+
+        function updateDisplay() {
+            const m = Math.floor(totalSeconds / 60);
+            const s = totalSeconds % 60;
+            const label = `${m}:${s.toString().padStart(2, '0')}`;
+            document.getElementById('timer').textContent = label;
+            document.title = `${label} — ${modeName}`;
+        }
+
+        function setMode(minutes, name, btn) {
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            modeName = name;
+            clearInterval(timerInterval);
+            timerInterval = null;
+            running = false;
+            totalSeconds = minutes * 60;
+            defaultSeconds = minutes * 60;
+            setStartBtn('start', 'Start');
+            document.getElementById('status').textContent = 'Ready';
+            updateDisplay();
+        }
+
+        function toggleTimer() {
+            if (!running) {
+                // Start or resume
+                running = true;
+                setStartBtn('pause', 'Pause');
+                document.getElementById('status').textContent = modeName + ' in progress';
+                timerInterval = setInterval(() => {
+                    totalSeconds--;
+                    updateDisplay();
+                    if (totalSeconds <= 0) {
+                        clearInterval(timerInterval);
+                        timerInterval = null;
+                        running = false;
+                        setStartBtn('start', 'Start');
+                        document.getElementById('status').textContent = modeName + ' complete!';
+                        document.title = `Done — ${modeName}`;
+                        // Use Web Notifications if permitted (non-blocking, unlike alert)
+                        if (Notification.permission === 'granted') {
+                            new Notification('Pomodoro', { body: modeName + ' complete!' });
+                        }
+                    }
+                }, 1000);
+            } else {
+                // Pause
+                running = false;
+                clearInterval(timerInterval);
+                timerInterval = null;
+                setStartBtn('start', 'Resume');
+                document.getElementById('status').textContent = 'Paused';
+            }
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            running = false;
+            totalSeconds = defaultSeconds;
+            setStartBtn('start', 'Start');
+            document.getElementById('status').textContent = 'Ready';
+            updateDisplay();
+        }
+
+        function setStartBtn(type, label) {
+            const btn = document.getElementById('startPauseBtn');
+            btn.textContent = label;
+            btn.className = 'action ' + type;
+        }
+
+        // Request notification permission on load (optional — gracefully ignored if denied)
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        updateDisplay();
     </script>
 </body>
 
