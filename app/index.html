@@ -13,23 +13,29 @@
         }
 
         body {
-            background: #0f0f0f;
+            background: radial-gradient(circle at top, #2a2a35, #0a0a0d);
             color: white;
             font-family: system-ui, sans-serif;
+
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 20px;
+            gap: 24px;
         }
 
-        /* Mode buttons */
+        /* Mode bar */
         .mode-bar {
             display: flex;
-            gap: 8px;
+            gap: 10px;
+            padding: 6px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        /* Buttons */
         .mode-btn {
             padding: 7px 18px;
             border-radius: 20px;
@@ -42,53 +48,56 @@
         }
 
         .mode-btn:hover {
+            color: white;
             border-color: rgba(255, 255, 255, 0.4);
-            color: rgba(255, 255, 255, 0.8);
         }
 
         .mode-btn.active {
             background: rgba(255, 255, 255, 0.12);
             color: white;
-            border-color: rgba(255, 255, 255, 0.4);
-            font-weight: 500;
         }
 
-        /* Timer display */
         #timer {
-            font-size: 96px;
-            font-weight: 500;
-            letter-spacing: -3px;
+            font-size: 110px;
+            font-weight: 700;
+            letter-spacing: -4px;
             font-variant-numeric: tabular-nums;
-            line-height: 1;
+
+            background: linear-gradient(180deg, #ffffff, #b5b5b5);
+
+            -webkit-background-clip: text;
+            background-clip: text;
+
+            -webkit-text-fill-color: transparent;
+
+            display: inline-block;
         }
 
-        /* Status label */
+        /* STATUS */
         #status {
             font-size: 14px;
-            color: rgba(255, 255, 255, 0.45);
-            min-height: 20px;
-            letter-spacing: 0.02em;
+            color: rgba(255, 255, 255, 0.6);
         }
 
-        /* Action buttons */
+        /* BUTTONS */
         .buttons {
             display: flex;
             gap: 10px;
         }
 
         button.action {
-            padding: 13px 28px;
+            padding: 14px 30px;
             border: none;
-            border-radius: 12px;
+            border-radius: 14px;
             cursor: pointer;
             font-size: 16px;
-            font-weight: 500;
-            transition: opacity 0.15s, transform 0.1s;
+            font-weight: 600;
+            transition: transform 0.15s ease, opacity 0.15s ease;
         }
 
         button.action:active {
-            opacity: 0.75;
             transform: scale(0.97);
+            opacity: 0.8;
         }
 
         .start {
@@ -105,10 +114,41 @@
             background: #27272a;
             color: white;
         }
+
+        .hud {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            padding: 14px 16px;
+            border-radius: 14px;
+
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+
+            font-size: 12px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+
+            color: rgba(255, 255, 255, 0.85);
+
+            box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+            transition: all 0.3s ease;
+
+            .hud {
+                background: red !important;
+                transform: scale(1.2) !important;
+                border: 5px solid yellow !important;
+            }
     </style>
 </head>
 
 <body>
+    <div class="hud">
+        <div class="hud-top">BASELINE HUD</div>
+        <div class="hud-item">MODE: <span id="hud-mode">POMODORO</span></div>
+        <div class="hud-item">FOCUS: <span id="hud-focus">0%</span></div>
+    </div>
 
     <div class="mode-bar">
         <button class="mode-btn active" onclick="setMode(25, 'Pomodoro', this)">Pomodoro</button>
@@ -116,12 +156,14 @@
         <button class="mode-btn" onclick="setMode(15, 'Long break', this)">Long break</button>
     </div>
 
-    <div id="timer">25:00</div>
-    <div id="status">Ready</div>
+    <div class="card">
+        <div id="timer">25:00</div>
+        <div id="status">Ready</div>
 
-    <div class="buttons">
-        <button class="action start" id="startPauseBtn" onclick="toggleTimer()">Start</button>
-        <button class="action reset" onclick="resetTimer()">Reset</button>
+        <div class="buttons">
+            <button class="action start" id="startPauseBtn" onclick="toggleTimer()">Start</button>
+            <button class="action reset" onclick="resetTimer()">Reset</button>
+        </div>
     </div>
 
     <script>
@@ -137,12 +179,23 @@
             const label = `${m}:${s.toString().padStart(2, '0')}`;
             document.getElementById('timer').textContent = label;
             document.title = `${label} — ${modeName}`;
+            const progress = 1 - (totalSeconds / defaultSeconds);
+            const focus = Math.max(0, Math.min(100, Math.floor(progress * 100)));
+
+            const focusEl = document.getElementById('hud-focus');
+            focusEl.textContent = focus + '%';
+
+            if (focus < 30) focusEl.style.color = "rgba(255,255,255,0.5)";
+            else if (focus < 70) focusEl.style.color = "rgba(255,255,255,0.8)";
+            else focusEl.style.color = "#22c55e";
+            document.getElementById('hud-mode').textContent = modeName.toUpperCase();
         }
 
         function setMode(minutes, name, btn) {
             document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             modeName = name;
+            document.getElementById('hud-mode').textContent = name.toUpperCase();
             clearInterval(timerInterval);
             timerInterval = null;
             running = false;
@@ -157,6 +210,7 @@
             if (!running) {
                 // Start or resume
                 running = true;
+                document.body.classList.add('running');
                 setStartBtn('pause', 'Pause');
                 document.getElementById('status').textContent = modeName + ' in progress';
                 timerInterval = setInterval(() => {
@@ -166,6 +220,7 @@
                         clearInterval(timerInterval);
                         timerInterval = null;
                         running = false;
+                        document.body.classList.remove('running');
                         setStartBtn('start', 'Start');
                         document.getElementById('status').textContent = modeName + ' complete!';
                         document.title = `Done — ${modeName}`;
@@ -178,6 +233,7 @@
             } else {
                 // Pause
                 running = false;
+                document.body.classList.remove('running');
                 clearInterval(timerInterval);
                 timerInterval = null;
                 setStartBtn('start', 'Resume');
@@ -189,6 +245,7 @@
             clearInterval(timerInterval);
             timerInterval = null;
             running = false;
+            document.body.classList.remove('running');
             totalSeconds = defaultSeconds;
             setStartBtn('start', 'Start');
             document.getElementById('status').textContent = 'Ready';
