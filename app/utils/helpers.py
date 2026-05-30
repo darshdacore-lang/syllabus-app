@@ -25,15 +25,50 @@ def now_iso():
 
 
 def parse_iso_datetime(value):
+    if isinstance(value, datetime.datetime):
+        return value
+    if isinstance(value, datetime.date):
+        return datetime.datetime.combine(value, datetime.time.min)
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.datetime.fromtimestamp(value)
+        except (OSError, OverflowError, ValueError):
+            return None
     if not isinstance(value, str):
         return None
+
+    value = value.strip()
+    if not value:
+        return None
+
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+
     try:
-        return datetime.datetime.fromisoformat(value)
+        dt = datetime.datetime.fromisoformat(value)
     except ValueError:
-        try:
-            return datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")
-        except ValueError:
-            return None
+        dt = None
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S.%f%z",
+            "%Y-%m-%dT%H:%M:%S%z",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+        ):
+            try:
+                dt = datetime.datetime.strptime(value, fmt)
+                break
+            except ValueError:
+                continue
+        if dt is None:
+            try:
+                return datetime.datetime.fromtimestamp(float(value))
+            except (ValueError, OSError, OverflowError):
+                return None
+
+    if dt.tzinfo is not None:
+        dt = dt.astimezone().replace(tzinfo=None)
+    return dt
 
 
 def format_minutes(minutes):
@@ -51,23 +86,52 @@ def format_timer(seconds):
 
 
 def parse_date(value):
+    if isinstance(value, datetime.date) and not isinstance(value, datetime.datetime):
+        return value
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.datetime.fromtimestamp(value).date()
+        except (OSError, OverflowError, ValueError):
+            return None
+    if not isinstance(value, str):
+        return None
+
+    value = value.strip()
     if not value:
         return None
-    try:
-        return datetime.datetime.strptime(value.strip(), "%Y-%m-%d").date()
-    except (TypeError, ValueError):
-        return None
+
+    if value.endswith("Z"):
+        value = value[:-1]
+
+    for fmt in (
+        "%Y-%m-%d",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            return datetime.datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+
+    return None
 
 
 def join_tags(tags):
     if not tags:
         return ""
     if isinstance(tags, str):
-        tags = [tags]
-    return ", ".join(str(tag).strip() for tag in tags if str(tag).strip())
+        return tags.strip()
+    if isinstance(tags, (list, tuple, set)):
+        return ", ".join(str(tag).strip() for tag in tags if str(tag).strip())
+    return str(tags).strip()
 
 
 def parse_tags(value):
     if not value:
         return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(tag).strip() for tag in value if str(tag).strip()]
     return [tag.strip() for tag in str(value).split(",") if tag.strip()]

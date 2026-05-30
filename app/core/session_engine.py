@@ -141,6 +141,61 @@ class SessionEngine:
 
         return active
 
+    def pause(self):
+        active = self.get_active()
+        if not active or active.get("state") != "running":
+            return active
+
+        active["state"] = "paused"
+        active["updated_at"] = self._now()
+        self.storage.save()
+        return active
+
+    def resume(self):
+        active = self.get_active()
+        if not active or active.get("state") != "paused":
+            return active
+
+        active["state"] = "running"
+        active["updated_at"] = self._now()
+        self.storage.save()
+        return active
+
+    def complete_focus(self, active):
+        if not active or active.get("session_type") != "focus":
+            self.profile["active_session"] = None
+            self.storage.save()
+            return None
+
+        self.tick()
+        active = self.get_active()
+        if not active:
+            return None
+
+        studied_seconds = safe_int(active.get("total_seconds"), 0) - safe_int(
+            active.get("remaining_seconds"), 0
+        )
+        studied_minutes = round(studied_seconds / 60.0, 2)
+
+        if active.get("task_id"):
+            self._apply_task_progress(active.get("task_id"), studied_minutes)
+
+        self.profile.setdefault("sessions", []).append(
+            {
+                "subject": active.get("subject", "General"),
+                "task_title": active.get("task_title"),
+                "task_id": active.get("task_id"),
+                "tags": active.get("tags", []),
+                "started_at": active.get("started_at"),
+                "ended_at": self._now(),
+                "studied_minutes": studied_minutes,
+                "session_type": active.get("session_type"),
+            }
+        )
+        self.profile["active_session"] = None
+        self.storage.save()
+        return None
+
     # ─────────────────────────────
     # COMPLETE BREAK
     # ─────────────────────────────

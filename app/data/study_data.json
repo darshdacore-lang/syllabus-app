@@ -11,7 +11,7 @@
         "remaining_seconds": 0,
         "state": "running",
         "started_at": "2026-05-11T20:24:29.561546",
-        "updated_at": "2026-05-16T13:05:32.491975",
+        "updated_at": "2026-05-30T13:25:39.672126",
         "session_type": "focus",
         "task": null,
         "task_title": null,
@@ -69,6 +69,22 @@
           "details": "",
           "status": "open",
           "minutes_logged": 0
+        },
+        {
+          "id": 5,
+          "title": "test",
+          "subject": "Sci",
+          "due_date": "2026-05-22",
+          "tags": [
+            "a",
+            "b"
+          ],
+          "details": [
+            "x",
+            "y"
+          ],
+          "status": "open",
+          "minutes_logged": 0
         }
       ],
       "plans": [],
@@ -90,7 +106,7 @@
         "sound_cues": true
       },
       "focus_cycle_count": 0,
-      "next_task_id": 5,
+      "next_task_id": 6,
       "next_plan_id": 1,
       "next_template_id": 1,
       "next_exam_id": 1,

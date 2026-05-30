@@ -5,7 +5,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.utils.helpers import safe_int, safe_float
+from app.utils.helpers import parse_tags, safe_int, safe_float
 
 
 class TaskManager:
@@ -22,7 +22,7 @@ class TaskManager:
             "title": title,
             "subject": subject or "General",
             "due_date": due_date or "",
-            "tags": tags.split(",") if isinstance(tags, str) else (tags or []),
+            "tags": parse_tags(tags),
             "details": details or "",
             "status": "open",
             "minutes_logged": 0,
@@ -306,19 +306,20 @@ class TaskManager:
     def _countdown_str(self, date_str):
         if not date_str:
             return "TBD"
-        try:
-            from datetime import datetime
+        from datetime import datetime
+        from app.utils.helpers import parse_date
 
-            exam_date = datetime.strptime(date_str[:10], "%Y-%m-%d").date()
-            today = datetime.now().date()
-            delta = (exam_date - today).days
-            if delta < 0:
-                return "Past"
-            elif delta == 0:
-                return "Today"
-            elif delta == 1:
-                return "Tomorrow"
-            else:
-                return f"{delta} days"
-        except:
+        exam_date = parse_date(date_str)
+        if exam_date is None:
             return "TBD"
+
+        today = datetime.now().date()
+        delta = (exam_date - today).days
+        if delta < 0:
+            return "Past"
+        elif delta == 0:
+            return "Today"
+        elif delta == 1:
+            return "Tomorrow"
+        else:
+            return f"{delta} days"
