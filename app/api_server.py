@@ -131,6 +131,6 @@ def run_server(port=5555, data_path=None):
 
 
 if __name__ == '__main__':
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5555
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
     data_path = sys.argv[2] if len(sys.argv) > 2 else None
     run_server(port, data_path)

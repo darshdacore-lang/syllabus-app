@@ -7,7 +7,7 @@ Run this independently to test the backend without Electron.
 import sys
 import json
 try:
-    import requests
+    import requests #type: ignore
     _have_requests = True
 except Exception:
     import urllib.request as _ur
