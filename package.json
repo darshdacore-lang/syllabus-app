@@ -1,5 +1,71 @@
 {
+  "name": "pomodoro-syllabus",
+  "version": "1.0.0",
+  "description": "A Pomodoro timer with syllabus integration",
+  "main": "app/main.js",
+  "homepage": "./",
+  "author": "Darsh Agarwal",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "npm run build:python && electron-builder --mac --publish never",
+    "build:dmg": "npm run build:python && electron-builder --mac dmg --publish never",
+    "build:all": "npm run build:python && electron-builder --mac --win --linux --publish never",
+    "build:python": "python3 scripts/build_python_bundle.py",
+    "test:dmg": "bash scripts/test_dmg.sh",
+    "test:dmg:run": "bash scripts/test_dmg.sh --run"
+  },
+  "build": {
+    "appId": "com.darshagarwal.pomodoro-syllabus",
+    "productName": "Pomodoro Syllabus",
+    "directories": {
+      "buildResources": "assets"
+    },
+    "files": [
+      "app",
+      "node_modules",
+      "resources/python"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "minimumSystemVersion": "12.0",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist"
+    },
+    "dmg": {
+      "title": "Pomodoro Syllabus",
+      "background": null,
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    }
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0"
+  },
   "devDependencies": {
-    "electron": "^42.3.0"
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.0"
   }
 }

@@ -2,3 +2,7 @@ dist/
 .env
 __pycache__/
 node_modules/
+resources/python/
+*.spec
+.DS_Store
+*.log
